@@ -146,36 +146,36 @@ Time2（4个字节）：此字段必须包含时间戳，在该时间戳下读�
 
 ## 握手顺序
 
-         +-------------+                           +-------------+
-         |    Client   |       TCP/IP Network      |    Server   |
-         +-------------+            |              +-------------+
-               |                    |                     |
-         Uninitialized              |               Uninitialized
-               |          C0        |                     |
-               |------------------->|         C0          |
-               |                    |-------------------->|
-               |          C1        |                     |
-               |------------------->|         S0          |
-               |                    |<--------------------|
-               |                    |         S1          |
-          Version sent              |<--------------------|
-               |          S0        |                     |
-               |<-------------------|                     |
-               |          S1        |                     |
-               |<-------------------|                Version sent
-               |                    |         C1          |
-               |                    |-------------------->|
-               |          C2        |                     |
-               |------------------->|         S2          |
-               |                    |<--------------------|
-            Ack sent                |                  Ack Sent
-               |          S2        |                     |
-               |<-------------------|                     |
-               |                    |         C2          |
-               |                    |-------------------->|
-          Handshake Done            |               Handshake Done
-               |                    |                     |
-                    Pictorial Representation of Handshake
+    +-------------+                           +-------------+
+    |    Client   |       TCP/IP Network      |    Server   |
+    +-------------+            |              +-------------+
+        |                    |                     |
+    Uninitialized              |               Uninitialized
+        |          C0        |                     |
+        |------------------->|         C0          |
+        |                    |-------------------->|
+        |          C1        |                     |
+        |------------------->|         S0          |
+        |                    |<--------------------|
+        |                    |         S1          |
+    Version sent              |<--------------------|
+        |          S0        |                     |
+        |<-------------------|                     |
+        |          S1        |                     |
+        |<-------------------|                Version sent
+        |                    |         C1          |
+        |                    |-------------------->|
+        |          C2        |                     |
+        |------------------->|         S2          |
+        |                    |<--------------------|
+    Ack sent                |                  Ack Sent
+        |          S2        |                     |
+        |<-------------------|                     |
+        |                    |         C2          |
+        |                    |-------------------->|
+    Handshake Done            |               Handshake Done
+        |                    |                     |
+            Pictorial Representation of Handshake
 
 **下面描述了握手图中提到的状态：**
 
@@ -200,11 +200,11 @@ Version Sent:  在未初始化状态之后，客户端和服务器都处于“�
 每个块均由 标题(hander) 和 数据(data) 组成。 标头本身包含三个部分：
 
 
-+--------------+----------------+--------------------+--------------+ 
-| Basic Header | Message Header | Extended Timestamp |  Chunk Data  |  
-+--------------+----------------+--------------------+--------------+
-|                                                    |
-|<------------------- Chunk Header ----------------->|
+    +--------------+----------------+--------------------+--------------+ 
+    | Basic Header | Message Header | Extended Timestamp |  Chunk Data  |  
+    +--------------+----------------+--------------------+--------------+
+    |                                                    |
+    |<------------------- Chunk Header ----------------->|
 
    
 
@@ -236,30 +236,30 @@ ID 0、1和2被保留。
 
 块流ID 2-63可以在此字段的1字节版本中编码。
 
- 0 1 2 3 4 5 6 7 （bits）
-+-+-+-+-+-+-+-+-+
-|fmt|   cs id   |
-+-+-+-+-+-+-+-+-+
-Chunk basic header 1
+    0 1 2 3 4 5 6 7 （bits）
+    +-+-+-+-+-+-+-+-+
+    |fmt|   cs id   |
+    +-+-+-+-+-+-+-+-+
+    Chunk basic header 1
 
 
 **块流ID 64-319可以头文件的2字节形式编码。 ID计算为（第二个字节+ 64）。**
 
- 0                   10            
- 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5
-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-|fmt|     0     |   cs id - 64  |
-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-	Chunk basic header 2
+    0                   10            
+    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |fmt|     0     |   cs id - 64  |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+        Chunk basic header 2
 
 
 **块流ID 64-65599可以在此字段的3字节版本中进行编码。 ID计算为（（第三个字节）* 256 +（第二个字节）+ 64）。**
 
- 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3
-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-|fmt|     1     |        cs id - 64             |
-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-	Chunk basic header 3
+    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |fmt|     1     |        cs id - 64             |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+        Chunk basic header 3
 
 cs id (6 bits):  该字段包含块流ID，取值范围为2-63。 值0和1用于指示此字段的2字节或3字节版本。
 
@@ -282,15 +282,15 @@ Chunk Message Header  = 11 bytes
 
 时间戳（3个字节）：对于类型0块，消息的绝对时间戳在此处发送。 如果时间戳大于或等于16777215（十六进制0xFFFFFF），则此字段务必为16777215，指示存在扩展时间戳字段以对完整的32位时间戳进行编码。 否则，此字段应为整个时间戳
      
- 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-|                   timestamp                   |message length |
-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-|     message length (cont)     |message type id| msg stream id |
-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-|           message stream id (cont)            |
-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ 
-     Chunk Message Header - Type 0
+    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |                   timestamp                   |message length |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |     message length (cont)     |message type id| msg stream id |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |           message stream id (cont)            |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ 
+        Chunk Message Header - Type 0
 
 
 ### Type 1 
@@ -300,13 +300,13 @@ Chunk Message Header  = 11 bytes
 Chunk Message Header  = 7 bytes
 类型1块标题的长度为7个字节。 消息流ID不包括在内； 该块采用与前面的块相同的流ID。 消息大小可变的流（例如，许多视频格式）应在每个新消息的第一个块之后使用这种格式
      
-0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-|                timestamp delta                |message length |
-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-|     message length (cont)     |message type id|
-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ 
-    Chunk Message Header - Type 1
+    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |                timestamp delta                |message length |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |     message length (cont)     |message type id|
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ 
+        Chunk Message Header - Type 1
 
 
 ### Type 2
@@ -400,17 +400,17 @@ Timestamp: 包含消息时间戳的四字节字段。 这4个字节按big-endian
 Message Stream Id: 标识消息流的三字节字段。 这些字节以big-endian格式设置。
 
 
-   0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 
-  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-  | Message Type  |                Payload length                 |
-  |   (1 byte)    |                 (3 bytes)                     |
-  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-  |                       Timestamp                               |
-  |                       (4 bytes)                               | 
-  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-  |                Stream ID                      | 
-  |                (3 bytes)                      |     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-                    Message Header
+    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    | Message Type  |                Payload length                 |
+    |   (1 byte)    |                 (3 bytes)                     |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |                       Timestamp                               |
+    |                       (4 bytes)                               | 
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |                Stream ID                      | 
+    |                (3 bytes)                      |     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+                        Message Header
 
 
 ## Message Payload 
@@ -514,10 +514,10 @@ NetConnection管理客户端应用程序和服务器之间的双向连接。 此
 
 可以在NetConnection上发送以下命令：
 
-   o  connect   
-   o  call   
-   o  close   
-   o  createStream
+- connect   
+- call   
+- close   
+- createStream
 
 
 ### connect 
@@ -526,196 +526,196 @@ NetConnection管理客户端应用程序和服务器之间的双向连接。 此
 
 从客户端到服务器的命令结构如下：
 
- +----------------+---------+---------------------------------------+
- |  Field Name    |  Type   |           Description                 |
- +--------------- +---------+---------------------------------------+
- | Command Name   | String  | Name of the command. Set to "connect".|
- +----------------+---------+---------------------------------------+
- | Transaction ID | Number  | Always set to 1.                      |
- +----------------+---------+---------------------------------------+
- | Command Object | Object  | Command information object which has  |
- |                |         | the name-value pairs.                 |
- +----------------+---------+---------------------------------------+
- | Optional User  | Object  | Any optional information              |
- | Arguments      |         |                                       |
- +----------------+---------+---------------------------------------+
+    +----------------+---------+---------------------------------------+
+    |  Field Name    |  Type   |           Description                 |
+    +--------------- +---------+---------------------------------------+
+    | Command Name   | String  | Name of the command. Set to "connect".|
+    +----------------+---------+---------------------------------------+
+    | Transaction ID | Number  | Always set to 1.                      |
+    +----------------+---------+---------------------------------------+
+    | Command Object | Object  | Command information object which has  |
+    |                |         | the name-value pairs.                 |
+    +----------------+---------+---------------------------------------+
+    | Optional User  | Object  | Any optional information              |
+    | Arguments      |         |                                       |
+    +----------------+---------+---------------------------------------+
 
 以下是connect命令的Command 
 Object中使用的名称/值对的描述
 
-+-----------+--------+-----------------------------+----------------+
-| Property  |  Type  |        Description          | Example Value  |
-+-----------+--------+-----------------------------+----------------+
-|   app     | String | The Server application name |    testapp     |
-|           |        | the client is connected to. |                |
-+-----------+--------+-----------------------------+----------------+
-| flashver  | String | Flash Player version. It is |    FMSc/1.0    |
-|           |        | the same string as returned |                |
-|           |        | by the ApplicationScript    |                |
-|           |        | getversion () function.     |                |
-+-----------+--------+-----------------------------+----------------+
-|  swfUrl   | String | URL of the source SWF file  | file://C:/     |
-|           |        | making the connection.      | FlvPlayer.swf  |
-+-----------+--------+-----------------------------+----------------+
-|  tcUrl    | String | URL of the Server.          | rtmp://local   |
-|           |        | It has the following format.| host:1935/test |
-|           |        | protocol://servername:port/ | app/instance1  |
-|           |        | appName/appInstance         |                |
-+-----------+--------+-----------------------------+----------------+
-|  fpad     | Boolean| True if proxy is being used.| true or false  |
-+-----------+--------+-----------------------------+----------------+
-|audioCodecs| Number | Indicates what audio codecs | SUPPORT_SND    |
-|           |        | the client supports.        | \_MP3          |
-+-----------+--------+-----------------------------+----------------+
-|videoCodecs| Number | Indicates what video codecs | SUPPORT_VID    |
-|           |        | are supported.              | \_SORENSON     |
-+-----------+--------+-----------------------------+----------------+
-|videoFunct-| Number | Indicates what special video| SUPPORT_VID    |
-|ion        |        | functions are supported.    | \_CLIENT_SEEK  |
-+-----------+--------+-----------------------------+----------------+
-|  pageUrl  | String | URL of the web page from    | http://        |
-|           |        | where the SWF file was      | somehost/      |
-|           |        | loaded.                     | sample.html    |
-+-----------+--------+-----------------------------+----------------+
-| object    | Number | AMF encoding method.        |     AMF3       |
-| Encoding  |        |                             |                |
-+-----------+--------+-----------------------------+----------------+
+    +-----------+--------+-----------------------------+----------------+
+    | Property  |  Type  |        Description          | Example Value  |
+    +-----------+--------+-----------------------------+----------------+
+    |   app     | String | The Server application name |    testapp     |
+    |           |        | the client is connected to. |                |
+    +-----------+--------+-----------------------------+----------------+
+    | flashver  | String | Flash Player version. It is |    FMSc/1.0    |
+    |           |        | the same string as returned |                |
+    |           |        | by the ApplicationScript    |                |
+    |           |        | getversion () function.     |                |
+    +-----------+--------+-----------------------------+----------------+
+    |  swfUrl   | String | URL of the source SWF file  | file://C:/     |
+    |           |        | making the connection.      | FlvPlayer.swf  |
+    +-----------+--------+-----------------------------+----------------+
+    |  tcUrl    | String | URL of the Server.          | rtmp://local   |
+    |           |        | It has the following format.| host:1935/test |
+    |           |        | protocol://servername:port/ | app/instance1  |
+    |           |        | appName/appInstance         |                |
+    +-----------+--------+-----------------------------+----------------+
+    |  fpad     | Boolean| True if proxy is being used.| true or false  |
+    +-----------+--------+-----------------------------+----------------+
+    |audioCodecs| Number | Indicates what audio codecs | SUPPORT_SND    |
+    |           |        | the client supports.        | \_MP3          |
+    +-----------+--------+-----------------------------+----------------+
+    |videoCodecs| Number | Indicates what video codecs | SUPPORT_VID    |
+    |           |        | are supported.              | \_SORENSON     |
+    +-----------+--------+-----------------------------+----------------+
+    |videoFunct-| Number | Indicates what special video| SUPPORT_VID    |
+    |ion        |        | functions are supported.    | \_CLIENT_SEEK  |
+    +-----------+--------+-----------------------------+----------------+
+    |  pageUrl  | String | URL of the web page from    | http://        |
+    |           |        | where the SWF file was      | somehost/      |
+    |           |        | loaded.                     | sample.html    |
+    +-----------+--------+-----------------------------+----------------+
+    | object    | Number | AMF encoding method.        |     AMF3       |
+    | Encoding  |        |                             |                |
+    +-----------+--------+-----------------------------+----------------+
 
 audioCodecs属性的标志值：
 
-+----------------------+----------------------------+--------------+
-|      Codec Flag      |          Usage             |     Value    |
-+----------------------+----------------------------+--------------+
-|  SUPPORT_SND_NONE    | Raw sound, no compression  |    0x0001    |
-+----------------------+----------------------------+--------------+
-|  SUPPORT_SND_ADPCM   | ADPCM compression          |    0x0002    |
-+----------------------+----------------------------+--------------+
-|  SUPPORT_SND_MP3     | mp3 compression            |    0x0004    |
-+----------------------+----------------------------+--------------+
-|  SUPPORT_SND_INTEL   | Not used                   |    0x0008    |
-+----------------------+----------------------------+--------------+
-|  SUPPORT_SND_UNUSED  | Not used                   |    0x0010    |
-+----------------------+----------------------------+--------------+
-|  SUPPORT_SND_NELLY8  | NellyMoser at 8-kHz        |    0x0020    |
-|                      | compression                |              |
-+----------------------+----------------------------+--------------+
-|  SUPPORT_SND_NELLY   | NellyMoser compression     |    0x0040    |
-|                      | (5, 11, 22, and 44 kHz)    |              |
-+----------------------+----------------------------+--------------+
-|  SUPPORT_SND_G711A   | G711A sound compression    |    0x0080    |
-|                      | (Flash Media Server only)  |              |
-+----------------------+----------------------------+--------------+
-|  SUPPORT_SND_G711U   | G711U sound compression    |    0x0100    |
-|                      | (Flash Media Server only)  |              |
-+----------------------+----------------------------+--------------+
-|  SUPPORT_SND_NELLY16 | NellyMouser at 16-kHz      |    0x0200    |
-|                      | compression                |              |
-+----------------------+----------------------------+--------------+
-|  SUPPORT_SND_AAC     | Advanced audio coding      |    0x0400    |
-|                      | (AAC) codec                |              |
-+----------------------+----------------------------+--------------+
-|  SUPPORT_SND_SPEEX   | Speex Audio                |    0x0800    |
-+----------------------+----------------------------+--------------+
-|  SUPPORT_SND_ALL     | All RTMP-supported audio   |    0x0FFF    |
-|                      | codecs                     |              |
-+----------------------+----------------------------+--------------+
+    +----------------------+----------------------------+--------------+
+    |      Codec Flag      |          Usage             |     Value    |
+    +----------------------+----------------------------+--------------+
+    |  SUPPORT_SND_NONE    | Raw sound, no compression  |    0x0001    |
+    +----------------------+----------------------------+--------------+
+    |  SUPPORT_SND_ADPCM   | ADPCM compression          |    0x0002    |
+    +----------------------+----------------------------+--------------+
+    |  SUPPORT_SND_MP3     | mp3 compression            |    0x0004    |
+    +----------------------+----------------------------+--------------+
+    |  SUPPORT_SND_INTEL   | Not used                   |    0x0008    |
+    +----------------------+----------------------------+--------------+
+    |  SUPPORT_SND_UNUSED  | Not used                   |    0x0010    |
+    +----------------------+----------------------------+--------------+
+    |  SUPPORT_SND_NELLY8  | NellyMoser at 8-kHz        |    0x0020    |
+    |                      | compression                |              |
+    +----------------------+----------------------------+--------------+
+    |  SUPPORT_SND_NELLY   | NellyMoser compression     |    0x0040    |
+    |                      | (5, 11, 22, and 44 kHz)    |              |
+    +----------------------+----------------------------+--------------+
+    |  SUPPORT_SND_G711A   | G711A sound compression    |    0x0080    |
+    |                      | (Flash Media Server only)  |              |
+    +----------------------+----------------------------+--------------+
+    |  SUPPORT_SND_G711U   | G711U sound compression    |    0x0100    |
+    |                      | (Flash Media Server only)  |              |
+    +----------------------+----------------------------+--------------+
+    |  SUPPORT_SND_NELLY16 | NellyMouser at 16-kHz      |    0x0200    |
+    |                      | compression                |              |
+    +----------------------+----------------------------+--------------+
+    |  SUPPORT_SND_AAC     | Advanced audio coding      |    0x0400    |
+    |                      | (AAC) codec                |              |
+    +----------------------+----------------------------+--------------+
+    |  SUPPORT_SND_SPEEX   | Speex Audio                |    0x0800    |
+    +----------------------+----------------------------+--------------+
+    |  SUPPORT_SND_ALL     | All RTMP-supported audio   |    0x0FFF    |
+    |                      | codecs                     |              |
+    +----------------------+----------------------------+--------------+
 
 videoCodecs属性的标志值：
 
-+----------------------+----------------------------+--------------+
-|      Codec Flag      |            Usage           |    Value     |
-+----------------------+----------------------------+--------------+
-|  SUPPORT_VID_UNUSED  | Obsolete value             |    0x0001    |
-+----------------------+----------------------------+--------------+
-|  SUPPORT_VID_JPEG    | Obsolete value             |    0x0002    |    +----------------------+----------------------------+--------------+
-| SUPPORT_VID_SORENSON | Sorenson Flash video       |    0x0004    |
-+----------------------+----------------------------+--------------+
-| SUPPORT_VID_HOMEBREW | V1 screen sharing          |    0x0008    |
-+----------------------+----------------------------+--------------+
-| SUPPORT_VID_VP6 (On2)| On2 video (Flash 8+)       |    0x0010    |
-+----------------------+----------------------------+--------------+
-| SUPPORT_VID_VP6ALPHA | On2 video with alpha       |    0x0020    |
-| (On2 with alpha      | channel                    |              |
-| channel)             |                            |              |
-+----------------------+----------------------------+--------------+
-| SUPPORT_VID_HOMEBREWV| Screen sharing version 2   |    0x0040    |
-| (screensharing v2)   | (Flash 8+)                 |              |
-+----------------------+----------------------------+--------------+
-| SUPPORT_VID_H264     | H264 video                 |    0x0080    |
-+----------------------+----------------------------+--------------+
-| SUPPORT_VID_ALL      | All RTMP-supported video   |    0x00FF    |
-|                      | codecs                     |              |
-+----------------------+----------------------------+--------------+
+    +----------------------+----------------------------+--------------+
+    |      Codec Flag      |            Usage           |    Value     |
+    +----------------------+----------------------------+--------------+
+    |  SUPPORT_VID_UNUSED  | Obsolete value             |    0x0001    |
+    +----------------------+----------------------------+--------------+
+    |  SUPPORT_VID_JPEG    | Obsolete value             |    0x0002    |    +----------------------+----------------------------+--------------+
+    | SUPPORT_VID_SORENSON | Sorenson Flash video       |    0x0004    |
+    +----------------------+----------------------------+--------------+
+    | SUPPORT_VID_HOMEBREW | V1 screen sharing          |    0x0008    |
+    +----------------------+----------------------------+--------------+
+    | SUPPORT_VID_VP6 (On2)| On2 video (Flash 8+)       |    0x0010    |
+    +----------------------+----------------------------+--------------+
+    | SUPPORT_VID_VP6ALPHA | On2 video with alpha       |    0x0020    |
+    | (On2 with alpha      | channel                    |              |
+    | channel)             |                            |              |
+    +----------------------+----------------------------+--------------+
+    | SUPPORT_VID_HOMEBREWV| Screen sharing version 2   |    0x0040    |
+    | (screensharing v2)   | (Flash 8+)                 |              |
+    +----------------------+----------------------------+--------------+
+    | SUPPORT_VID_H264     | H264 video                 |    0x0080    |
+    +----------------------+----------------------------+--------------+
+    | SUPPORT_VID_ALL      | All RTMP-supported video   |    0x00FF    |
+    |                      | codecs                     |              |
+    +----------------------+----------------------------+--------------+
 
 videoFunction属性的标志值：
 
-+----------------------+----------------------------+--------------+
-|    Function Flag     |           Usage            |     Value    |
-+----------------------+----------------------------+--------------+
-| SUPPORT_VID_CLIENT   | Indicates that the client  |       1      |
-| \_SEEK               | can perform frame-accurate |              |
-|                      | seeks.                     |              |
-+----------------------+----------------------------+--------------+
+    +----------------------+----------------------------+--------------+
+    |    Function Flag     |           Usage            |     Value    |
+    +----------------------+----------------------------+--------------+
+    | SUPPORT_VID_CLIENT   | Indicates that the client  |       1      |
+    | _SEEK               | can perform frame-accurate |              |
+    |                      | seeks.                     |              |
+    +----------------------+----------------------------+--------------+
 
 对象编码属性的值：
 
-+----------------------+----------------------------+--------------+
-|    Encoding Type     |           Usage            |    Value     |
-+----------------------+----------------------------+--------------+
-|        AMF0          | AMF0 object encoding       |      0       |
-|                      | supported by Flash 6 and   |              |
-|                      | later                      |              |
-+----------------------+----------------------------+--------------+
-|        AMF3          | AMF3 encoding from         |      3       |
-|                      | Flash 9 (AS3)              |              |
-+----------------------+----------------------------+--------------+
+    +----------------------+----------------------------+--------------+
+    |    Encoding Type     |           Usage            |    Value     |
+    +----------------------+----------------------------+--------------+
+    |        AMF0          | AMF0 object encoding       |      0       |
+    |                      | supported by Flash 6 and   |              |
+    |                      | later                      |              |
+    +----------------------+----------------------------+--------------+
+    |        AMF3          | AMF3 encoding from         |      3       |
+    |                      | Flash 9 (AS3)              |              |
+    +----------------------+----------------------------+--------------+
 
 从服务器到客户端的命令结构如下：
 
-+--------------+----------+----------------------------------------+
-| Field Name   |   Type   |             Description                |
-+--------------+----------+----------------------------------------+
-| Command Name |  String  | \_result or \_error; indicates whether |
-|              |          | the response is result or error.       |
-+--------------+----------+----------------------------------------+
-| Transaction  |  Number  | Transaction ID is 1 for connect        |
-| ID           |          | responses                              |
-|              |          |                                        |
-+--------------+----------+----------------------------------------+
-| Properties   |  Object  | Name-value pairs that describe the     |
-|              |          | properties(fmsver etc.) of the         |
-|              |          | connection.                            |
-+--------------+----------+----------------------------------------+
-| Information  |  Object  | Name-value pairs that describe the     |
-|              |          | response from|the server. ’code’,      |
-|              |          | ’level’, ’description’ are names of few|
-|              |          | among such information.                |
-+--------------+----------+----------------------------------------+
+    +--------------+----------+----------------------------------------+
+    | Field Name   |   Type   |             Description                |
+    +--------------+----------+----------------------------------------+
+    | Command Name |  String  | \_result or \_error; indicates whether |
+    |              |          | the response is result or error.       |
+    +--------------+----------+----------------------------------------+
+    | Transaction  |  Number  | Transaction ID is 1 for connect        |
+    | ID           |          | responses                              |
+    |              |          |                                        |
+    +--------------+----------+----------------------------------------+
+    | Properties   |  Object  | Name-value pairs that describe the     |
+    |              |          | properties(fmsver etc.) of the         |
+    |              |          | connection.                            |
+    +--------------+----------+----------------------------------------+
+    | Information  |  Object  | Name-value pairs that describe the     |
+    |              |          | response from|the server. ’code’,      |
+    |              |          | ’level’, ’description’ are names of few|
+    |              |          | among such information.                |
+    +--------------+----------+----------------------------------------+
 
 
 connect命令中的消息流
 
-+--------------+                              +-------------+
-|    Client    |             |                |    Server   |
-+------+-------+             |                +------+------+
-    |              Handshaking done               |
-    |                     |                       |
-    |                     |                       |
-    |                     |                       |
-    |                     |                       |
-    |----------- Command Message(connect) ------->|
-    |                                             |
-    |<------- Window Acknowledgement Size --------|
-    |                                             |
-    |<----------- Set Peer Bandwidth -------------|
-    |                                             |
-    |-------- Window Acknowledgement Size ------->|
-    |                                             |
-    |<------ User Control Message(StreamBegin) ---|
-    |                                             |
-    |<------------ Command Message ---------------|
-    |       (\_result- connect response)          |
-    |                                             |
+    +--------------+                              +-------------+
+    |    Client    |             |                |    Server   |
+    +------+-------+             |                +------+------+
+        |              Handshaking done               |
+        |                     |                       |
+        |                     |                       |
+        |                     |                       |
+        |                     |                       |
+        |----------- Command Message(connect) ------->|
+        |                                             |
+        |<------- Window Acknowledgement Size --------|
+        |                                             |
+        |<----------- Set Peer Bandwidth -------------|
+        |                                             |
+        |-------- Window Acknowledgement Size ------->|
+        |                                             |
+        |<------ User Control Message(StreamBegin) ---|
+        |                                             |
+        |<------------ Command Message ---------------|
+        |       (\_result- connect response)          |
+        |                                             |
 
 
 执行命令期间的消息流为：
@@ -739,40 +739,40 @@ NetConnection对象的调用方法在接收端运行远程过程调用（RPC）�
 
 从发送者到接收者的命令结构如下：
 
-+--------------+----------+----------------------------------------+
-|Field Name    |   Type   |             Description                |
-+--------------+----------+----------------------------------------+
-| Procedure    |  String  | Name of the remote procedure that is   |
-| Name         |          | called.                                |
-+--------------+----------+----------------------------------------+
-| Transaction  |  Number  | If a response is expected we give a    |
-|              |          | transaction Id. Else we pass a value of|
-| ID           |          | 0                                      |
-+--------------+----------+----------------------------------------+
-| Command      |  Object  | If there exists any command info this  |
-| Object       |          | is set, else this is set to null type. |
-+--------------+----------+----------------------------------------+
-| Optional     |  Object  | Any optional arguments to be provided  |
-| Arguments    |          |                                        |
-+--------------+----------+----------------------------------------+
+    +--------------+----------+----------------------------------------+
+    |Field Name    |   Type   |             Description                |
+    +--------------+----------+----------------------------------------+
+    | Procedure    |  String  | Name of the remote procedure that is   |
+    | Name         |          | called.                                |
+    +--------------+----------+----------------------------------------+
+    | Transaction  |  Number  | If a response is expected we give a    |
+    |              |          | transaction Id. Else we pass a value of|
+    | ID           |          | 0                                      |
+    +--------------+----------+----------------------------------------+
+    | Command      |  Object  | If there exists any command info this  |
+    | Object       |          | is set, else this is set to null type. |
+    +--------------+----------+----------------------------------------+
+    | Optional     |  Object  | Any optional arguments to be provided  |
+    | Arguments    |          |                                        |
+    +--------------+----------+----------------------------------------+
 
 响应的命令结构如下：
 
-+--------------+----------+----------------------------------------+
-| Field Name   |   Type   |             Description                |
-+--------------+----------+----------------------------------------+
-| Command Name |  String  | Name of the command.                   |
-|              |          |                                        |
-+--------------+----------+----------------------------------------+
-| Transaction  |  Number  | ID of the command, to which the        |
-| ID           |          | response belongs.                      |
-+--------------+----------+----------------------------------------+
-| Command      |  Object  | If there exists any command info this  |
-| Object       |          | is set, else this is set to null type. |
-+--------------+----------+----------------------------------------+
-| Response     | Object   | Response from the method that was      |
-|              |          | called.                                |
-+------------------------------------------------------------------+
+    +--------------+----------+----------------------------------------+
+    | Field Name   |   Type   |             Description                |
+    +--------------+----------+----------------------------------------+
+    | Command Name |  String  | Name of the command.                   |
+    |              |          |                                        |
+    +--------------+----------+----------------------------------------+
+    | Transaction  |  Number  | ID of the command, to which the        |
+    | ID           |          | response belongs.                      |
+    +--------------+----------+----------------------------------------+
+    | Command      |  Object  | If there exists any command info this  |
+    | Object       |          | is set, else this is set to null type. |
+    +--------------+----------+----------------------------------------+
+    | Response     | Object   | Response from the method that was      |
+    |              |          | called.                                |
+    +------------------------------------------------------------------+
 
 ### createStream 
 
@@ -782,36 +782,36 @@ NetConnection是默认通信通道，其流ID为0。协议和一些命令消息�
 
 从客户端到服务器的命令结构如下：
 
-+--------------+----------+----------------------------------------+
-| Field Name   |   Type   |             Description                |
-+--------------+----------+----------------------------------------+
-| Command Name |  String  | Name of the command. Set to            |
-|              |          | "createStream".                        |
-+--------------+----------+----------------------------------------+
-| Transaction  |  Number  | Transaction ID of the command.         |
-| ID           |          |                                        |
-+--------------+----------+----------------------------------------+
-| Command      |  Object  | If there exists any command info this  |
-| Object       |          | is set, else this is set to null type. |
-+--------------+----------+----------------------------------------+
+    +--------------+----------+----------------------------------------+
+    | Field Name   |   Type   |             Description                |
+    +--------------+----------+----------------------------------------+
+    | Command Name |  String  | Name of the command. Set to            |
+    |              |          | "createStream".                        |
+    +--------------+----------+----------------------------------------+
+    | Transaction  |  Number  | Transaction ID of the command.         |
+    | ID           |          |                                        |
+    +--------------+----------+----------------------------------------+
+    | Command      |  Object  | If there exists any command info this  |
+    | Object       |          | is set, else this is set to null type. |
+    +--------------+----------+----------------------------------------+
 
 从服务器到客户端的命令结构如下：
 
-+--------------+----------+----------------------------------------+
-| Field Name   |   Type   |             Description                |
-+--------------+----------+----------------------------------------+
-| Command Name |  String  | \_result or \_error; indicates whether |
-|              |          | the response is result or error.       |
-+--------------+----------+----------------------------------------+
-| Transaction  |  Number  | ID of the command that response belongs|
-| ID           |          | to.                                    |
-+--------------+----------+----------------------------------------+
-| Command      |  Object  | If there exists any command info this  |
-| Object       |          | is set, else this is set to null type. |
-+--------------+----------+----------------------------------------+
-| Stream       |  Number  | The return value is either a stream ID |
-| ID           |          | or an error information object.        |
-+--------------+----------+----------------------------------------+
+    +--------------+----------+----------------------------------------+
+    | Field Name   |   Type   |             Description                |
+    +--------------+----------+----------------------------------------+
+    | Command Name |  String  | \_result or \_error; indicates whether |
+    |              |          | the response is result or error.       |
+    +--------------+----------+----------------------------------------+
+    | Transaction  |  Number  | ID of the command that response belongs|
+    | ID           |          | to.                                    |
+    +--------------+----------+----------------------------------------+
+    | Command      |  Object  | If there exists any command info this  |
+    | Object       |          | is set, else this is set to null type. |
+    +--------------+----------+----------------------------------------+
+    | Stream       |  Number  | The return value is either a stream ID |
+    | ID           |          | or an error information object.        |
+    +--------------+----------+----------------------------------------+
 
 
 
@@ -834,28 +834,28 @@ NetStream定义了流音频，视频和数据消息可以通过该通道流过�
 
  服务器使用“ onStatus”命令将NetStream状态更新发送给客户端：
 
- +--------------+----------+----------------------------------------+
- | Field Name   |   Type   |             Description                |
- +--------------+----------+----------------------------------------+
- | Command Name |  String  | The command name "onStatus".           |
- +--------------+----------+----------------------------------------+
- | Transaction  |  Number  | Transaction ID set to 0.               |
- | ID           |          |                                        |
- +--------------+----------+----------------------------------------+
- | Command      |  Null    | There is no command object for         |
- | Object       |          | onStatus messages.                     |
- +--------------+----------+----------------------------------------+
- | Info Object  | Object   | An AMF object having at least the      |
- |              |          | following three properties: "level"    |
- |              |          | (String): the level for this message,  |
- |              |          | one of "warning", "status", or "error";|
- |              |          | "code" (String): the message code, for |
- |              |          | example "NetStream.Play.Start"; and    |
- |              |          | "description" (String): a human-       |
- |              |          | readable description of the message.   |
- |              |          | The Info object MAY contain other      |
- |              |          | properties as appropriate to the code. |
- +--------------+----------+----------------------------------------+
+    +--------------+----------+----------------------------------------+
+    | Field Name   |   Type   |             Description                |
+    +--------------+----------+----------------------------------------+
+    | Command Name |  String  | The command name "onStatus".           |
+    +--------------+----------+----------------------------------------+
+    | Transaction  |  Number  | Transaction ID set to 0.               |
+    | ID           |          |                                        |
+    +--------------+----------+----------------------------------------+
+    | Command      |  Null    | There is no command object for         |
+    | Object       |          | onStatus messages.                     |
+    +--------------+----------+----------------------------------------+
+    | Info Object  | Object   | An AMF object having at least the      |
+    |              |          | following three properties: "level"    |
+    |              |          | (String): the level for this message,  |
+    |              |          | one of "warning", "status", or "error";|
+    |              |          | "code" (String): the message code, for |
+    |              |          | example "NetStream.Play.Start"; and    |
+    |              |          | "description" (String): a human-       |
+    |              |          | readable description of the message.   |
+    |              |          | The Info object MAY contain other      |
+    |              |          | properties as appropriate to the code. |
+    +--------------+----------+----------------------------------------+
 
  NetStream状态消息命令的格式。
 
@@ -867,115 +867,115 @@ NetStream定义了流音频，视频和数据消息可以通过该通道流过�
 
 从客户端到服务器的命令结构如下：
 
-+--------------+----------+-----------------------------------------+
-| Field Name   |   Type   |             Description                 |
-+--------------+----------+-----------------------------------------+
-| Command Name |  String  | Name of the command. Set to "play".     |
-+--------------+----------+-----------------------------------------+
-| Transaction  |  Number  | Transaction ID set to 0.                |
-| ID           |          |                                         |
-+--------------+----------+-----------------------------------------+
-| Command      |   Null   | Command information does not exist.     |
-| Object       |          | Set to null type.                       |
-+--------------+----------+-----------------------------------------+
-| Stream Name  |  String  | Name of the stream to play.             |
-|              |          | To play video (FLV) files, specify the  |
-|              |          | name of the stream without a file       |
-|              |          | extension (for example, "sample"). To   |
-|              |          | play back MP3 or ID3 tags, you must     |
-|              |          | precede the stream name with mp3:       |
-|              |          | (for example, "mp3:sample". To play     |
-|              |          | H.264/AAC files, you must precede the   |
-|              |          | stream name with mp4: and specify the   |
-|              |          | file extension. For example, to play the|
-|              |          | file sample.m4v,specify "mp4:sample.m4v"|
-|              |          |                                         |
-+--------------+----------+-----------------------------------------+
-| Start        |  Number  | An optional parameter that specifies    |
-|              |          | the start time in seconds. The default  |
-|              |          | value is -2, which means the subscriber |
-|              |          | first tries to play the live stream     |
-|              |          | specified in the Stream Name field. If a|
-|              |          | live stream of that name is not found,it|
-|              |          | plays the recorded stream of the same   |
-|              |          | name. If there is no recorded stream    |
-|              |          | with that name, the subscriber waits for|
-|              |          | a new live stream with that name and    |
-|              |          | plays it when available. If you pass -1 |
-|              |          | in the Start field, only the live stream|
-|              |          | specified in the Stream Name field is   |
-|              |          | played. If you pass 0 or a positive     |
-|              |          | number in the Start field, a recorded   |
-|              |          | stream specified in the Stream Name     |
-|              |          | field is played beginning from the time |
-|              |          | specified in the Start field. If no     |
-|              |          | recorded stream is found, the next item |
-|              |          | in the playlist is played.              |
-+--------------+----------+-----------------------------------------+
-| Duration     |  Number  | An optional parameter that specifies the|
-|              |          | duration of playback in seconds. The    |
-|              |          | default value is -1. The -1 value means |
-|              |          | a live stream is played until it is no  |
-|              |          | longer available or a recorded stream is|
-|              |          | played until it ends. If you pass 0, it |
-|              |          | plays the single frame since the time   |
-|              |          | specified in the Start field from the   |
-|              |          | beginning of a recorded stream. It is   |
-|              |          | assumed that the value specified in     |
-|              |          | the Start field is equal to or greater  |
-|              |          | than 0. If you pass a positive number,  |
-|              |          | it plays a live stream for              |
-|              |          | the time period specified in the        |
-|              |          | Duration field. After that it becomes   |
-|              |          | available or plays a recorded stream    |
-|              |          | for the time specified in the Duration  |
-|              |          | field. (If a stream ends before the     |
-|              |          | time specified in the Duration field,   |
-|              |          | playback ends when the stream ends.)    |
-|              |          | If you pass a negative number other     |
-|              |          | than -1 in the Duration field, it       |
-|              |          | interprets the value as if it were -1.  |
-+--------------+----------+-----------------------------------------+
-| Reset        | Boolean  | An optional Boolean value or number     |
-|              |          | that specifies whether to flush any     |
-|              |          | previous playlist.                      |
-+--------------+----------+-----------------------------------------+
+    +--------------+----------+-----------------------------------------+
+    | Field Name   |   Type   |             Description                 |
+    +--------------+----------+-----------------------------------------+
+    | Command Name |  String  | Name of the command. Set to "play".     |
+    +--------------+----------+-----------------------------------------+
+    | Transaction  |  Number  | Transaction ID set to 0.                |
+    | ID           |          |                                         |
+    +--------------+----------+-----------------------------------------+
+    | Command      |   Null   | Command information does not exist.     |
+    | Object       |          | Set to null type.                       |
+    +--------------+----------+-----------------------------------------+
+    | Stream Name  |  String  | Name of the stream to play.             |
+    |              |          | To play video (FLV) files, specify the  |
+    |              |          | name of the stream without a file       |
+    |              |          | extension (for example, "sample"). To   |
+    |              |          | play back MP3 or ID3 tags, you must     |
+    |              |          | precede the stream name with mp3:       |
+    |              |          | (for example, "mp3:sample". To play     |
+    |              |          | H.264/AAC files, you must precede the   |
+    |              |          | stream name with mp4: and specify the   |
+    |              |          | file extension. For example, to play the|
+    |              |          | file sample.m4v,specify "mp4:sample.m4v"|
+    |              |          |                                         |
+    +--------------+----------+-----------------------------------------+
+    | Start        |  Number  | An optional parameter that specifies    |
+    |              |          | the start time in seconds. The default  |
+    |              |          | value is -2, which means the subscriber |
+    |              |          | first tries to play the live stream     |
+    |              |          | specified in the Stream Name field. If a|
+    |              |          | live stream of that name is not found,it|
+    |              |          | plays the recorded stream of the same   |
+    |              |          | name. If there is no recorded stream    |
+    |              |          | with that name, the subscriber waits for|
+    |              |          | a new live stream with that name and    |
+    |              |          | plays it when available. If you pass -1 |
+    |              |          | in the Start field, only the live stream|
+    |              |          | specified in the Stream Name field is   |
+    |              |          | played. If you pass 0 or a positive     |
+    |              |          | number in the Start field, a recorded   |
+    |              |          | stream specified in the Stream Name     |
+    |              |          | field is played beginning from the time |
+    |              |          | specified in the Start field. If no     |
+    |              |          | recorded stream is found, the next item |
+    |              |          | in the playlist is played.              |
+    +--------------+----------+-----------------------------------------+
+    | Duration     |  Number  | An optional parameter that specifies the|
+    |              |          | duration of playback in seconds. The    |
+    |              |          | default value is -1. The -1 value means |
+    |              |          | a live stream is played until it is no  |
+    |              |          | longer available or a recorded stream is|
+    |              |          | played until it ends. If you pass 0, it |
+    |              |          | plays the single frame since the time   |
+    |              |          | specified in the Start field from the   |
+    |              |          | beginning of a recorded stream. It is   |
+    |              |          | assumed that the value specified in     |
+    |              |          | the Start field is equal to or greater  |
+    |              |          | than 0. If you pass a positive number,  |
+    |              |          | it plays a live stream for              |
+    |              |          | the time period specified in the        |
+    |              |          | Duration field. After that it becomes   |
+    |              |          | available or plays a recorded stream    |
+    |              |          | for the time specified in the Duration  |
+    |              |          | field. (If a stream ends before the     |
+    |              |          | time specified in the Duration field,   |
+    |              |          | playback ends when the stream ends.)    |
+    |              |          | If you pass a negative number other     |
+    |              |          | than -1 in the Duration field, it       |
+    |              |          | interprets the value as if it were -1.  |
+    +--------------+----------+-----------------------------------------+
+    | Reset        | Boolean  | An optional Boolean value or number     |
+    |              |          | that specifies whether to flush any     |
+    |              |          | previous playlist.                      |
+    +--------------+----------+-----------------------------------------+
 
 播放命令中的消息流
 
-         +-------------+                            +----------+
-         | Play Client |             |              |   Server |
-         +------+------+             |              +-----+----+
-                |        Handshaking and Application       |
-                |             connect done                 |
-                |                    |                     |
-                |                    |                     |
-                |                    |                     |
-                |                    |                     |
-       ---+---- |------Command Message(createStream) ----->|
-    Create|     |                                          |
-    Stream|     |                                          |
-       ---+---- |<---------- Command Message --------------|
-                |     (_result- createStream response)     |
-                |                                          |
-       ---+---- |------ Command Message (play) ----------->|
-          |     |                                          |
-          |     |<------------  SetChunkSize --------------|
-          |     |                                          |
-          |     |<---- User Control (StreamIsRecorded) ----|
-      Play|     |                                          |
-          |     |<---- UserControl (StreamBegin) ----------|
-          |     |                                          |
-          |     |<--Command Message(onStatus-play reset) --|
-          |     |                                          |
-          |     |<--Command Message(onStatus-play start) --|
-          |     |                                          |
-          |     |<-------------Audio Message---------------|
-          |     |                                          |
-          |     |<-------------Video Message---------------|
-          |     |                    |                     |                 
-                                     |
-                  继续接收音频和视频流，直到完成播放命令中的消息流
+            +-------------+                            +----------+
+            | Play Client |             |              |   Server |
+            +------+------+             |              +-----+----+
+                    |        Handshaking and Application       |
+                    |             connect done                 |
+                    |                    |                     |
+                    |                    |                     |
+                    |                    |                     |
+                    |                    |                     |
+        ---+---- |------Command Message(createStream) ----->|
+        Create|     |                                          |
+        Stream|     |                                          |
+        ---+---- |<---------- Command Message --------------|
+                    |     (_result- createStream response)     |
+                    |                                          |
+        ---+---- |------ Command Message (play) ----------->|
+            |     |                                          |
+            |     |<------------  SetChunkSize --------------|
+            |     |                                          |
+            |     |<---- User Control (StreamIsRecorded) ----|
+        Play|     |                                          |
+            |     |<---- UserControl (StreamBegin) ----------|
+            |     |                                          |
+            |     |<--Command Message(onStatus-play reset) --|
+            |     |                                          |
+            |     |<--Command Message(onStatus-play start) --|
+            |     |                                          |
+            |     |<-------------Audio Message---------------|
+            |     |                                          |
+            |     |<-------------Video Message---------------|
+            |     |                    |                     |                 
+                                        |
+                    继续接收音频和视频流，直到完成播放命令中的消息流
  
 执行命令期间的消息流为：
 
@@ -997,66 +997,66 @@ NetStream定义了流音频，视频和数据消息可以通过该通道流过�
 
 从客户端到服务器的命令结构如下：
 
-+--------------+----------+----------------------------------------+
-| Field Name   |   Type   |             Description                |
-+--------------+----------+----------------------------------------+
-| Command Name |  String  | Name of the command, set to "play2".   |
-+--------------+----------+----------------------------------------+
-| Transaction  |  Number  | Transaction ID set to 0.               |
-| ID           |          |                                        |
-+--------------+----------+----------------------------------------+
-| Command      |   Null   | Command information does not exist.    |
-| Object       |          | Set to null type.                      |
-+--------------+----------+----------------------------------------+
-| Parameters   |  Object  | An AMF encoded object whose properties |
-|              |          | are the public properties described    |
-|              |          | for the flash.net.NetStreamPlayOptions |
-|              |          | ActionScript object.                   |
-+--------------+----------+----------------------------------------+
+    +--------------+----------+----------------------------------------+
+    | Field Name   |   Type   |             Description                |
+    +--------------+----------+----------------------------------------+
+    | Command Name |  String  | Name of the command, set to "play2".   |
+    +--------------+----------+----------------------------------------+
+    | Transaction  |  Number  | Transaction ID set to 0.               |
+    | ID           |          |                                        |
+    +--------------+----------+----------------------------------------+
+    | Command      |   Null   | Command information does not exist.    |
+    | Object       |          | Set to null type.                      |
+    +--------------+----------+----------------------------------------+
+    | Parameters   |  Object  | An AMF encoded object whose properties |
+    |              |          | are the public properties described    |
+    |              |          | for the flash.net.NetStreamPlayOptions |
+    |              |          | ActionScript object.                   |
+    +--------------+----------+----------------------------------------+
 
 NetStreamPlayOptions对象的公共属性在《 ActionScript 3语言参考》 [AS3]中进行了描述。
 
 下图显示了该命令的消息流。
 
-           +--------------+                          +-------------+           
-           | Play2 Client |              |           |    Server   |
-           +--------+-----+              |           +------+------+
-                    |      Handshaking and Application      |
-                    |               connect done            |
-                    |                    |                  |
-                    |                    |                  |
-                    |                    |                  |
-                    |                    |                  |
-           ---+---- |---- Command Message(createStream) --->|
-       Create |     |                                       |
-       Stream |     |                                       |
-           ---+---- |<---- Command Message (_result) -------|
-                    |                                       |
-           ---+---- |------ Command Message (play) -------->|
-              |     |                                       |
-              |     |<------------ SetChunkSize ------------|
-              |     |                                       |
-              |     |<--- UserControl (StreamIsRecorded)----|
-         Play |     |                                       |
-              |     |<------- UserControl (StreamBegin)-----|
-              |     |                                       |
-              |     |<--Command Message(onStatus-playstart)-|
-              |     |                                       |
-              |     |<---------- Audio Message -------------|
-              |     |                                       |
-              |     |<---------- Video Message -------------|
-              |     |                                       |
-                    |                                       |
-           ---+---- |-------- Command Message(play2) ------>|
-              |     |                                       |
-              |     |<------- Audio Message (new rate) -----|
-        Play2 |     |                                       |
-              |     |<------- Video Message (new rate) -----|
-              |     |                    |                  |
-              |     |                    |                  |
-              |  Keep receiving audio and video stream till finishes
-                                         |
-                     Message flow in the play2 command
+            +--------------+                          +-------------+           
+            | Play2 Client |              |           |    Server   |
+            +--------+-----+              |           +------+------+
+                        |      Handshaking and Application      |
+                        |               connect done            |
+                        |                    |                  |
+                        |                    |                  |
+                        |                    |                  |
+                        |                    |                  |
+            ---+---- |---- Command Message(createStream) --->|
+        Create |     |                                       |
+        Stream |     |                                       |
+            ---+---- |<---- Command Message (_result) -------|
+                        |                                       |
+            ---+---- |------ Command Message (play) -------->|
+                |     |                                       |
+                |     |<------------ SetChunkSize ------------|
+                |     |                                       |
+                |     |<--- UserControl (StreamIsRecorded)----|
+            Play |     |                                       |
+                |     |<------- UserControl (StreamBegin)-----|
+                |     |                                       |
+                |     |<--Command Message(onStatus-playstart)-|
+                |     |                                       |
+                |     |<---------- Audio Message -------------|
+                |     |                                       |
+                |     |<---------- Video Message -------------|
+                |     |                                       |
+                        |                                       |
+            ---+---- |-------- Command Message(play2) ------>|
+                |     |                                       |
+                |     |<------- Audio Message (new rate) -----|
+            Play2 |     |                                       |
+                |     |<------- Video Message (new rate) -----|
+                |     |                    |                  |
+                |     |                    |                  |
+                |  Keep receiving audio and video stream till finishes
+                                            |
+                        Message flow in the play2 command
 
 ### deleteStream 
 
@@ -1064,21 +1064,21 @@ NetStreamPlayOptions对象的公共属性在《 ActionScript 3语言参考》 [A
 
 从客户端到服务器的命令结构如下：
 
-    +--------------+----------+----------------------------------------+
-    | Field Name   |   Type   |             Description                |
-    +--------------+----------+----------------------------------------+
-    | Command Name |  String  | Name of the command, set to            |
-    |              |          | "deleteStream".                        |
-    +--------------+----------+----------------------------------------+
-    | Transaction  |  Number  | Transaction ID set to 0.               |
-    | ID           |          |                                        |
-    +--------------+----------+----------------------------------------+
-    | Command      |  Null    | Command information object does not    |
-    | Object       |          | exist. Set to null type.               |
-    +--------------+----------+----------------------------------------+
-    | Stream ID    |  Number  | The ID of the stream that is destroyed |
-    |              |          | on the server.                         |
-    +--------------+----------+----------------------------------------+
+        +--------------+----------+----------------------------------------+
+        | Field Name   |   Type   |             Description                |
+        +--------------+----------+----------------------------------------+
+        | Command Name |  String  | Name of the command, set to            |
+        |              |          | "deleteStream".                        |
+        +--------------+----------+----------------------------------------+
+        | Transaction  |  Number  | Transaction ID set to 0.               |
+        | ID           |          |                                        |
+        +--------------+----------+----------------------------------------+
+        | Command      |  Null    | Command information object does not    |
+        | Object       |          | exist. Set to null type.               |
+        +--------------+----------+----------------------------------------+
+        | Stream ID    |  Number  | The ID of the stream that is destroyed |
+        |              |          | on the server.                         |
+        +--------------+----------+----------------------------------------+
 
 服务器不发送任何响应。
 
@@ -1088,21 +1088,21 @@ NetStream发送receiveAudio消息来通知服务器是否将音频发送到客�
 
 从客户端到服务器的命令结构如下：
 
-    +--------------+----------+----------------------------------------+
-    | Field Name   |   Type   |             Description                |
-    +--------------+----------+----------------------------------------+
-    | Command Name |  String  | Name of the command, set to            |
-    |              |          | "receiveAudio".                        |
-    +--------------+----------+----------------------------------------+
-    | Transaction  |  Number  | Transaction ID set to 0.               |
-    | ID           |          |                                        |
-    +--------------+----------+----------------------------------------+
-    | Command      |  Null    | Command information object does not    |
-    | Object       |          | exist. Set to null type.               |
-    +--------------+----------+----------------------------------------+
-    | Bool Flag    |  Boolean | true or false to indicate whether to   |
-    |              |          | receive audio or not.                  |
-    +--------------+----------+----------------------------------------+
+        +--------------+----------+----------------------------------------+
+        | Field Name   |   Type   |             Description                |
+        +--------------+----------+----------------------------------------+
+        | Command Name |  String  | Name of the command, set to            |
+        |              |          | "receiveAudio".                        |
+        +--------------+----------+----------------------------------------+
+        | Transaction  |  Number  | Transaction ID set to 0.               |
+        | ID           |          |                                        |
+        +--------------+----------+----------------------------------------+
+        | Command      |  Null    | Command information object does not    |
+        | Object       |          | exist. Set to null type.               |
+        +--------------+----------+----------------------------------------+
+        | Bool Flag    |  Boolean | true or false to indicate whether to   |
+        |              |          | receive audio or not.                  |
+        +--------------+----------+----------------------------------------+
 
 如果在bool标志设置为false的情况下发送了receiveAudio命令，则服务器不会发送任何响应。 如果此标志设置为true，则服务器将以状态消息NetStream.Seek.Notify和NetStream.Play.Start进行响应。
 
@@ -1112,21 +1112,21 @@ NetStream发送receiveVideo消息来通知服务器是否将视频发送到客�
 
 从客户端到服务器的命令结构如下：
 
-    +--------------+----------+----------------------------------------+
-    | Field Name   |   Type   |             Description                |
-    +--------------+----------+----------------------------------------+
-    | Command Name |  String  | Name of the command, set to            |
-    |              |          | "receiveVideo".                        |
-    +--------------+----------+----------------------------------------+
-    | Transaction  |  Number  | Transaction ID set to 0.               |
-    | ID           |          |                                        |
-    +--------------+----------+----------------------------------------+
-    | Command      |  Null    | Command information object does not    |
-    | Object       |          | exist. Set to null type.               |
-    +--------------+----------+----------------------------------------+
-    | Bool Flag    |  Boolean | true or false to indicate whether to   |
-    |              |          | receive video or not.                  |
-    +--------------+----------+----------------------------------------+
+        +--------------+----------+----------------------------------------+
+        | Field Name   |   Type   |             Description                |
+        +--------------+----------+----------------------------------------+
+        | Command Name |  String  | Name of the command, set to            |
+        |              |          | "receiveVideo".                        |
+        +--------------+----------+----------------------------------------+
+        | Transaction  |  Number  | Transaction ID set to 0.               |
+        | ID           |          |                                        |
+        +--------------+----------+----------------------------------------+
+        | Command      |  Null    | Command information object does not    |
+        | Object       |          | exist. Set to null type.               |
+        +--------------+----------+----------------------------------------+
+        | Bool Flag    |  Boolean | true or false to indicate whether to   |
+        |              |          | receive video or not.                  |
+        +--------------+----------+----------------------------------------+
 
 如果在bool标志设置为false的情况下发送了receiveVideo命令，则服务器不会发送任何响应。 如果此标志设置为true，则服务器将以状态消息NetStream.Seek.Notify和NetStream.Play.Start进行响应。
 
@@ -1137,34 +1137,34 @@ NetStream发送receiveVideo消息来通知服务器是否将视频发送到客�
 
 从客户端到服务器的命令结构如下：
 
-    +--------------+----------+----------------------------------------+
-    | Field Name   |   Type   |             Description                |
-    +--------------+----------+----------------------------------------+
-    | Command Name |  String  | Name of the command, set to "publish". |
-    +--------------+----------+----------------------------------------+
-    | Transaction  |  Number  | Transaction ID set to 0.               |
-    | ID           |          |                                        |
-    +--------------+----------+----------------------------------------+
-    | Command      |  Null    | Command information object does not    |
-    | Object       |          | exist. Set to null type.               |
-    +--------------+----------+----------------------------------------+
-    | Publishing   |  String  | Name with which the stream is          |
-    | Name         |          | published.                             |
-    +--------------+----------+----------------------------------------+
-    | Publishing   |  String  | Type of publishing. Set to "live",     |
-    | Type         |          | "record", or "append".                 |
-    |              |          | record: The stream is published and the|
-    |              |          | data is recorded to a new file.The file|
-    |              |          | is stored on the server in a           |
-    |              |          | subdirectory within the directory that |
-    |              |          | contains the server application. If the|
-    |              |          | file already exists, it is overwritten.|
-    |              |          | append: The stream is published and the|
-    |              |          | data is appended to a file. If no file |
-    |              |          | is found, it is created.               |
-    |              |          | live: Live data is published without   |
-    |              |          | recording it in a file.                |
-    +--------------+----------+----------------------------------------+
+        +--------------+----------+----------------------------------------+
+        | Field Name   |   Type   |             Description                |
+        +--------------+----------+----------------------------------------+
+        | Command Name |  String  | Name of the command, set to "publish". |
+        +--------------+----------+----------------------------------------+
+        | Transaction  |  Number  | Transaction ID set to 0.               |
+        | ID           |          |                                        |
+        +--------------+----------+----------------------------------------+
+        | Command      |  Null    | Command information object does not    |
+        | Object       |          | exist. Set to null type.               |
+        +--------------+----------+----------------------------------------+
+        | Publishing   |  String  | Name with which the stream is          |
+        | Name         |          | published.                             |
+        +--------------+----------+----------------------------------------+
+        | Publishing   |  String  | Type of publishing. Set to "live",     |
+        | Type         |          | "record", or "append".                 |
+        |              |          | record: The stream is published and the|
+        |              |          | data is recorded to a new file.The file|
+        |              |          | is stored on the server in a           |
+        |              |          | subdirectory within the directory that |
+        |              |          | contains the server application. If the|
+        |              |          | file already exists, it is overwritten.|
+        |              |          | append: The stream is published and the|
+        |              |          | data is appended to a file. If no file |
+        |              |          | is found, it is created.               |
+        |              |          | live: Live data is published without   |
+        |              |          | recording it in a file.                |
+        +--------------+----------+----------------------------------------+
 
 服务器使用onStatus命令进行响应，以标记发布的开始。
 
@@ -1174,20 +1174,20 @@ NetStream发送receiveVideo消息来通知服务器是否将视频发送到客�
 
 从客户端到服务器的命令结构如下：
 
-    +--------------+----------+----------------------------------------+
-    | Field Name   |   Type   |             Description                |
-    +--------------+----------+----------------------------------------+
-    | Command Name |  String  | Name of the command, set to "seek".    |
-    +--------------+----------+----------------------------------------+
-    | Transaction  |  Number  | Transaction ID set to 0.               |
-    | ID           |          |                                        |
-    +--------------+----------+----------------------------------------+
-    | Command      |  Null    | There is no command information object |
-    | Object       |          | for this command. Set to null type.    |
-    +--------------+----------+----------------------------------------+
-    | milliSeconds |  Number  | Number of milliseconds to seek into    |
-    |              |          | the playlist.                          |
-    +--------------+----------+----------------------------------------+
+        +--------------+----------+----------------------------------------+
+        | Field Name   |   Type   |             Description                |
+        +--------------+----------+----------------------------------------+
+        | Command Name |  String  | Name of the command, set to "seek".    |
+        +--------------+----------+----------------------------------------+
+        | Transaction  |  Number  | Transaction ID set to 0.               |
+        | ID           |          |                                        |
+        +--------------+----------+----------------------------------------+
+        | Command      |  Null    | There is no command information object |
+        | Object       |          | for this command. Set to null type.    |
+        +--------------+----------+----------------------------------------+
+        | milliSeconds |  Number  | Number of milliseconds to seek into    |
+        |              |          | the playlist.                          |
+        +--------------+----------+----------------------------------------+
 
 查找成功时，服务器将发送状态消息NetStream.Seek.Notify。 如果失败，它将返回_error消息。
 
@@ -1198,28 +1198,28 @@ NetStream发送receiveVideo消息来通知服务器是否将视频发送到客�
 
 从客户端到服务器的命令结构如下：
 
-    +--------------+----------+----------------------------------------+
-    | Field Name   |   Type   |             Description                |
-    +--------------+----------+----------------------------------------+
-    | Command Name |  String  | Name of the command, set to "pause".   |
-    +--------------+----------+----------------------------------------+
-    | Transaction  |  Number  | There is no transaction ID for this    |
-    | ID           |          | command. Set to 0.                     |
-    +--------------+----------+----------------------------------------+
-    | Command      |  Null    | Command information object does not    |
-    | Object       |          | exist. Set to null type.               |
-    +--------------+----------+----------------------------------------+
-    |Pause/Unpause |  Boolean | true or false, to indicate pausing or  |
-    | Flag         |          | resuming play                          |
-    +--------------+----------+----------------------------------------+
-    | milliSeconds |  Number  | Number of milliseconds at which the    |
-    |              |          | the stream is paused or play resumed.  |
-    |              |          | This is the current stream time at the |
-    |              |          | Client when stream was paused. When the|
-    |              |          | playback is resumed, the server will   |
-    |              |          | only send messages with timestamps     |
-    |              |          | greater than this value.               |
-    +--------------+----------+----------------------------------------+
+        +--------------+----------+----------------------------------------+
+        | Field Name   |   Type   |             Description                |
+        +--------------+----------+----------------------------------------+
+        | Command Name |  String  | Name of the command, set to "pause".   |
+        +--------------+----------+----------------------------------------+
+        | Transaction  |  Number  | There is no transaction ID for this    |
+        | ID           |          | command. Set to 0.                     |
+        +--------------+----------+----------------------------------------+
+        | Command      |  Null    | Command information object does not    |
+        | Object       |          | exist. Set to null type.               |
+        +--------------+----------+----------------------------------------+
+        |Pause/Unpause |  Boolean | true or false, to indicate pausing or  |
+        | Flag         |          | resuming play                          |
+        +--------------+----------+----------------------------------------+
+        | milliSeconds |  Number  | Number of milliseconds at which the    |
+        |              |          | the stream is paused or play resumed.  |
+        |              |          | This is the current stream time at the |
+        |              |          | Client when stream was paused. When the|
+        |              |          | playback is resumed, the server will   |
+        |              |          | only send messages with timestamps     |
+        |              |          | greater than this value.               |
+        +--------------+----------+----------------------------------------+
 
 服务器在流暂停时发送状态消息NetStream.Pause.Notify。 流处于未暂停状态时发送NetStream.Unpause.Notify。 如果失败，它将返回_error消息。
 
