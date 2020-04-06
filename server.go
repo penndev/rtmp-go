@@ -15,14 +15,6 @@ func handle1(conn net.Conn) {
 
 }
 
-func checkErr(err error) {
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
-}
-
 func ctrl(chunk chunk, buf *bytes.Reader, conn net.Conn) {
 
 }

@@ -1,10 +1,10 @@
-package main
+package rtmp
 
 import (
 	"log"
 	"net"
 
-	"github.com/pennfly/amf-go"
+	"github.com/pennfly/rtmp-go/amf"
 )
 
 //CommandAMF0 20
