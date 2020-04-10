@@ -1,31 +1,52 @@
 package rtmp
 
 import (
-	"log"
-	"net"
+	"bufio"
+	"errors"
 )
 
-//rtmp 握手
-func chunkSteamHandshake(c net.Conn) (err error) {
-	buf := make([]byte, 1537)
-	_, err = c.Read(buf)
-	if err != nil {
-		return err
-	}
-	// C0+C1->
-	if buf[0] != 3 {
-		log.Println("rtmp version is not right!")
-	} else {
-		// <-S0+S1+S2
-		mg := buf[0:]
-		for _, value := range buf[1:1537] {
-			mg = append(mg, value)
-		}
-		c.Write(mg)
-	}
-	// throw C2->
+// 复杂握手的公共Key
+const (
+	// ServerKey 服务器验证常量
+	ServerKey = []byte{
+		'G', 'e', 'n', 'u', 'i', 'n', 'e', ' ', 'A', 'd', 'o', 'b', 'e', ' ',
+		'F', 'l', 'a', 's', 'h', ' ', 'M', 'e', 'd', 'i', 'a', ' ',
+		'S', 'e', 'r', 'v', 'e', 'r', ' ',
+		'0', '0', '1',
+		0xF0, 0xEE, 0xC2, 0x4A, 0x80, 0x68, 0xBE, 0xE8, 0x2E, 0x00, 0xD0, 0xD1,
+		0x02, 0x9E, 0x7E, 0x57, 0x6E, 0xEC, 0x5D, 0x2D, 0x29, 0x80, 0x6F, 0xAB,
+		0x93, 0xB8, 0xE6, 0x36, 0xCF, 0xEB, 0x31, 0xAE}
 
-	c2 := make([]byte, 1536)
-	_, err = c.Read(c2)
-	return err
+	// ClientKey 客户端验证常量
+	ClientKey = []byte{
+		'G', 'e', 'n', 'u', 'i', 'n', 'e', ' ', 'A', 'd', 'o', 'b', 'e', ' ',
+		'F', 'l', 'a', 's', 'h', ' ', 'P', 'l', 'a', 'y', 'e', 'r', ' ',
+		'0', '0', '1',
+		0xF0, 0xEE, 0xC2, 0x4A, 0x80, 0x68, 0xBE, 0xE8, 0x2E, 0x00, 0xD0, 0xD1,
+		0x02, 0x9E, 0x7E, 0x57, 0x6E, 0xEC, 0x5D, 0x2D, 0x29, 0x80, 0x6F, 0xAB,
+		0x93, 0xB8, 0xE6, 0x36, 0xCF, 0xEB, 0x31, 0xAE}
+)
+
+//Handshake rtmp 简单握手流程
+func Handshake(brw *bufio.ReadWriter) error {
+
+	buf := ReadBuf(brw, 1537)
+
+	// C0+C1->
+	if buf[0] != Version {
+		return errors.New("rtmp version is not right")
+	}
+
+	// <-S0+S1+S2
+	SREG := buf[0:]
+	for _, value := range buf[1:1537] {
+		SREG = append(SREG, value)
+	}
+
+	brw.Write(SREG)
+	brw.Flush()
+
+	// C2->
+	ReadBuf(brw, 1536)
+	return nil
 }

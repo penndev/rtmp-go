@@ -1,14 +1,14 @@
 package rtmp
 
 import (
+	"bufio"
 	"log"
-	"net"
 
 	"github.com/pennfly/rtmp-go/amf"
 )
 
 //CommandAMF0 20
-func CommandAMF0(m []byte, conn net.Conn) {
+func CommandAMF0(m []byte, conn *bufio.Writer) {
 	commandName := amf.Decode(m)
 	switch commandName[0] {
 	case "connect":
@@ -20,8 +20,18 @@ func CommandAMF0(m []byte, conn net.Conn) {
 	case "publish":
 		bs := []byte{4, 0, 0, 0, 0, 0, 105, 20, 1, 0, 0, 0, 2, 0, 8, 111, 110, 83, 116, 97, 116, 117, 115, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 3, 0, 5, 108, 101, 118, 101, 108, 2, 0, 6, 115, 116, 97, 116, 117, 115, 0, 4, 99, 111, 100, 101, 2, 0, 23, 78, 101, 116, 83, 116, 114, 101, 97, 109, 46, 80, 117, 98, 108, 105, 115, 104, 46, 83, 116, 97, 114, 116, 0, 11, 100, 101, 115, 99, 114, 105, 112, 116, 105, 111, 110, 2, 0, 16, 83, 116, 97, 114, 116, 32, 112, 117, 98, 108, 105, 115, 105, 110, 103, 46, 0, 0, 9}
 		conn.Write(bs)
-	default:
-
 	}
+	conn.Flush()
 	log.Println(commandName, len(m))
+
+}
+
+func connRecord(conn *Conn) {
+	for {
+		msg, _ := ReadChunkMessage(conn)
+		log.Println(msg)
+		if msg.header.MessageTypeID == 20 {
+			CommandAMF0(msg.message, conn.bw)
+		}
+	}
 }

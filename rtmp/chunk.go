@@ -1,134 +1,145 @@
 package rtmp
 
 import (
-	"log"
-	"net"
+	"bufio"
+	"io"
+
+	"github.com/pennfly/rtmp-go/util"
 )
 
-const (
-	// Type0 是fmt type = 0
-	Type0 = 11
-	// Type1 是fmt type = 1
-	Type1 = 7
-	// Type2 是fmt type = 2
-	Type2 = 3
-	// Type3 是fmt type = 3
-	Type3 = 0
-)
-
-//  Chunk Header
-type chunk struct {
-	fmt           int
-	csid          int
-	timestamp     int
-	messagelength int
-	messagetypeid int
-	msgstreamid   int
-	messagebody   []byte
-	debug         bool
-
-	//以下数据为程序设计用。
-
+type ChunkBasicHeader struct {
+	Format       byte
+	ChunkSteamId uint32
 }
 
-func (chunk *chunk) initialization(conn net.Conn) {
-	chunk.basicHeader(conn)
-	switch chunk.fmt {
-	case 0:
+type ChunkHeader struct {
+	Timestamp       uint32 // 3 byte
+	MessageLength   uint32 // 3 byte
+	MessageTypeID   byte   // 1 byte
+	MessageStreamID uint32 // 4 byte
+	ExtendTimestamp uint32 // 4 byte
+}
 
-		bufType := make([]byte, Type0)
-		len, err := conn.Read(bufType)
-		if err != nil {
-			log.Fatal("Rtmp Chunk Len and Err0：", len, err)
-		}
-		chunk.type0(bufType)
-		if chunk.debug == true {
-			log.Println("initialization 0 fmt:", bufType)
+type ChunkMessage struct {
+	basic   ChunkBasicHeader
+	header  ChunkHeader
+	message []byte
+}
+
+func readChunkBasicHeader(c *bufio.Reader) (ChunkBasicHeader, error) {
+	var cbh ChunkBasicHeader
+	basicHeader, err := c.ReadByte()
+	checkErr(err)
+	cbh.Format = basicHeader >> 6
+	cbh.ChunkSteamId = uint32(basicHeader & 0x3f)
+	if cbh.ChunkSteamId == 0 {
+		csid, err := c.ReadByte()
+		checkErr(err)
+		cbh.ChunkSteamId = 64 + uint32(csid)
+	} else if cbh.ChunkSteamId == 1 {
+		csid := make([]byte, 2)
+		_, err = io.ReadFull(c, csid)
+		checkErr(err)
+		cbh.ChunkSteamId = 64 + uint32(csid[0]) + 256*uint32(csid[1])
+	}
+	return cbh, nil
+}
+
+func readChunkHeader(c *bufio.Reader, b ChunkBasicHeader) (ChunkHeader, error) {
+	var chunk ChunkHeader
+	switch b.Format {
+	case 0:
+		buf := make([]byte, 3)
+		_, err := io.ReadFull(c, buf)
+		checkErr(err)
+		chunk.Timestamp = util.BigEndian.Uint24(buf)
+
+		_, err = io.ReadFull(c, buf)
+		checkErr(err)
+		chunk.MessageLength = util.BigEndian.Uint24(buf)
+
+		// Message Type ID 1 bytes
+		tp, err := c.ReadByte() // 读取Message Type ID
+		checkErr(err)
+		chunk.MessageTypeID = tp
+
+		// Message Stream ID 4bytes
+		buff := make([]byte, 4)
+		_, err = io.ReadFull(c, buff)
+		checkErr(err)
+		chunk.MessageStreamID = util.LittleEndian.Uint32(buff)
+
+		// ExtendTimestamp 4 bytes
+		if chunk.Timestamp == 0xffffff {
+			_, err = io.ReadFull(c, buff)
+			chunk.ExtendTimestamp = util.BigEndian.Uint32(buff)
 		}
 	case 1:
+		buf := make([]byte, 3)
+		_, err := io.ReadFull(c, buf)
+		checkErr(err)
+		chunk.Timestamp = util.BigEndian.Uint24(buf)
 
-		bufType := make([]byte, Type1)
-		len, err := conn.Read(bufType)
-		if err != nil {
-			log.Fatal("Rtmp Chunk Len and Err1：", len, err)
-		}
-		chunk.type1(bufType)
-		if chunk.debug == true {
-			log.Println("initialization 1 fmt:", bufType)
+		_, err = io.ReadFull(c, buf)
+		checkErr(err)
+		chunk.MessageLength = util.BigEndian.Uint24(buf)
+
+		// Message Type ID 1 bytes
+		tp, err := c.ReadByte() // 读取Message Type ID
+		checkErr(err)
+		chunk.MessageTypeID = tp
+
+		// ExtendTimestamp 4 bytes
+		if chunk.Timestamp == 0xffffff {
+			buff := make([]byte, 4)
+			_, err = io.ReadFull(c, buff)
+			chunk.ExtendTimestamp = util.BigEndian.Uint32(buff)
 		}
 	case 2:
+		buf := make([]byte, 3)
+		_, err := io.ReadFull(c, buf)
+		checkErr(err)
+		chunk.Timestamp = util.BigEndian.Uint24(buf)
 
-		bufType := make([]byte, Type2)
-		len, err := conn.Read(bufType)
-		if err != nil {
-			log.Fatal("Rtmp Chunk Len and Err2：", len, err)
-		}
-		chunk.type2(bufType)
-		if chunk.debug == true {
-			log.Println("initialization 2 fmt:", bufType)
+		// ExtendTimestamp 4 bytes
+		if chunk.Timestamp == 0xffffff {
+			buff := make([]byte, 4)
+			_, err = io.ReadFull(c, buff)
+			chunk.ExtendTimestamp = util.BigEndian.Uint32(buff)
 		}
 	case 3:
-
-		log.Println("Rtmp Chunk ChunkBasicHeader 3")
-
-	default:
-		// 读取错误为识别的数据。
-		buf := make([]byte, 1024)
-		len, err := conn.Read(buf)
-		if err != nil {
-			log.Fatal("Rtmp Chunk Len and Err：", len, err)
-		}
-		log.Println("Rtmp Chunk Error Body =", len)
+		// 什么都不用做？
 	}
-
-	chunk.messagebody = make([]byte, chunk.messagelength)
-	len, err := conn.Read(chunk.messagebody)
-	if err != nil {
-		log.Fatal("Rtmp chunk get body err: ", err, len)
-	}
-
+	return chunk, nil
 }
 
-// Chunk Basic Header
-func (chunk *chunk) basicHeader(conn net.Conn) {
-	bufFMT := make([]byte, 1)
-	bufflen, err := conn.Read(bufFMT)
-	if bufflen != 1 || err != nil {
-		log.Fatal("net.conn error")
+//TmpRead 缓存临时消息
+var TmpRead = make(map[uint32][]byte)
+
+func ReadChunkMessage(conn *Conn) (ChunkMessage, error) {
+	var msg ChunkMessage
+	msg.basic, _ = readChunkBasicHeader(conn.br)
+	msg.header, _ = readChunkHeader(conn.br, msg.basic)
+
+	if TmpRead[msg.basic.ChunkSteamId] == nil {
+		TmpRead[msg.basic.ChunkSteamId] = make([]byte, 0)
+	}
+	readed := uint32(len(TmpRead[msg.basic.ChunkSteamId]))
+	needRead := uint32(RTMP_DEFAULT_CHUNK_SIZE)
+	unRead := msg.header.MessageLength - readed
+	if unRead < needRead {
+		needRead = unRead
 	}
 
-	if chunk.debug == true {
-		log.Println("basicHeader fmt:", bufFMT)
+	buf := make([]byte, needRead)
+	_, err := io.ReadFull(conn.br, buf)
+	checkErr(err)
+
+	TmpRead[msg.basic.ChunkSteamId] = append(TmpRead[msg.basic.ChunkSteamId], buf...)
+	if uint32(len(TmpRead[msg.basic.ChunkSteamId])) == msg.header.MessageLength {
+		msg.message = TmpRead[msg.basic.ChunkSteamId]
+		delete(TmpRead, msg.basic.ChunkSteamId)
+		return msg, nil
 	}
-
-	chunk.fmt = int(bufFMT[0]) >> 6
-	chunk.csid = int(bufFMT[0]) & 0x3f
-
-	if chunk.csid == 0 {
-		bufCsid := make([]byte, 1)
-		conn.Read(bufCsid)
-		chunk.csid = int(bufCsid[0]) + 64
-	} else if chunk.csid == 1 {
-		bufCsid := make([]byte, 2)
-		conn.Read(bufCsid)
-		chunk.csid = int(bufCsid[1])>>8 + int(bufCsid[0]) + 64
-	}
-}
-
-//Type 0
-func (chunk *chunk) type0(header []byte) {
-	chunk.messagelength = int(header[3])<<16 + int(header[4])<<8 + int(header[5])
-	chunk.messagetypeid = int(header[6])
-
-}
-
-//Type 1
-func (chunk *chunk) type1(header []byte) {
-	chunk.messagelength = int(header[3])<<16 + int(header[4])<<8 + int(header[5])
-	chunk.messagetypeid = int(header[6])
-}
-
-//Type 2
-func (chunk *chunk) type2(b []byte) {
-
+	return ReadChunkMessage(conn)
 }

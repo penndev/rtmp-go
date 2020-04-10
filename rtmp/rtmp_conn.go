@@ -3,6 +3,7 @@ package rtmp
 import (
 	"bufio"
 	"net"
+	"time"
 )
 
 // Conn 单个连接详情
@@ -15,13 +16,24 @@ type Conn struct {
 	remoteAddr string
 	url        string
 	appName    string
-	connected  bool   // 连接是否完成
-	streamID   uint32 // 流ID
+	createTime string
 }
 
 //NewConn 初始化新链接
 func NewConn(conn net.Conn) Conn {
 	var c Conn
+	c.br = bufio.NewReader(conn)
+	c.bw = bufio.NewWriter(conn)
+	c.brw = bufio.NewReadWriter(c.br, c.bw)
 	c.conn = conn
+
+	c.remoteAddr = conn.RemoteAddr().String()
+	c.createTime = time.Now().String()
+
 	return c
+}
+
+// Close 关闭链接处理
+func (c Conn) Close() {
+	c.conn.Close()
 }
