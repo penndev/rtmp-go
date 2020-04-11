@@ -1,52 +1,38 @@
 package rtmp
 
 import (
-	"bufio"
+	"encoding/binary"
 	"errors"
 )
 
-// 复杂握手的公共Key
-const (
-	// ServerKey 服务器验证常量
-	ServerKey = []byte{
-		'G', 'e', 'n', 'u', 'i', 'n', 'e', ' ', 'A', 'd', 'o', 'b', 'e', ' ',
-		'F', 'l', 'a', 's', 'h', ' ', 'M', 'e', 'd', 'i', 'a', ' ',
-		'S', 'e', 'r', 'v', 'e', 'r', ' ',
-		'0', '0', '1',
-		0xF0, 0xEE, 0xC2, 0x4A, 0x80, 0x68, 0xBE, 0xE8, 0x2E, 0x00, 0xD0, 0xD1,
-		0x02, 0x9E, 0x7E, 0x57, 0x6E, 0xEC, 0x5D, 0x2D, 0x29, 0x80, 0x6F, 0xAB,
-		0x93, 0xB8, 0xE6, 0x36, 0xCF, 0xEB, 0x31, 0xAE}
-
-	// ClientKey 客户端验证常量
-	ClientKey = []byte{
-		'G', 'e', 'n', 'u', 'i', 'n', 'e', ' ', 'A', 'd', 'o', 'b', 'e', ' ',
-		'F', 'l', 'a', 's', 'h', ' ', 'P', 'l', 'a', 'y', 'e', 'r', ' ',
-		'0', '0', '1',
-		0xF0, 0xEE, 0xC2, 0x4A, 0x80, 0x68, 0xBE, 0xE8, 0x2E, 0x00, 0xD0, 0xD1,
-		0x02, 0x9E, 0x7E, 0x57, 0x6E, 0xEC, 0x5D, 0x2D, 0x29, 0x80, 0x6F, 0xAB,
-		0x93, 0xB8, 0xE6, 0x36, 0xCF, 0xEB, 0x31, 0xAE}
-)
+// Handshake Order
+// C0 + C1 -> Server
+// S0 + S1 + S2 ->Client
+// C2 -> Server
 
 //Handshake rtmp 简单握手流程
-func Handshake(brw *bufio.ReadWriter) error {
-
-	buf := ReadBuf(brw, 1537)
-
-	// C0+C1->
+func Handshake(c *Connnect) error {
+	buf, err := c.ReadBuffer(1537)
+	if err != nil {
+		return err
+	}
+	// RTMP VERSION == 3
 	if buf[0] != Version {
-		return errors.New("rtmp version is not right")
+		return errors.New("rtmp version is not support")
+	}
+
+	//判断是否 Fill Zero
+	if binary.BigEndian.Uint32(buf[5:9]) != 0 {
+		return errors.New("rtmp complex handshake not support")
 	}
 
 	// <-S0+S1+S2
-	SREG := buf[0:]
-	for _, value := range buf[1:1537] {
-		SREG = append(SREG, value)
-	}
-
-	brw.Write(SREG)
-	brw.Flush()
+	S01T := append(buf, buf[1:5]...)
+	S2 := append(buf[1:5], buf[9:1537]...)
+	S012 := append(S01T, S2...)
+	c.WriteBuffer(S012)
 
 	// C2->
-	ReadBuf(brw, 1536)
-	return nil
+	_, err = c.ReadBuffer(1536)
+	return err
 }

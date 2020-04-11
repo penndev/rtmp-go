@@ -1,7 +1,6 @@
 package rtmp
 
 import (
-	"io"
 	"log"
 	"net"
 )
@@ -31,18 +30,11 @@ func (s Service) handle(c Connnect) error {
 	defer c.Close()
 
 	// 首先client to service handshake
-	err := c.Handshake() // 握手
-
+	err := c.HandShake() // 握手
+	c.ReadRtmpMsg()
 	checkErr(err)
 
 	return nil
-}
-
-// ReadBuf 读取字节
-func ReadBuf(r io.Reader, length int) (buf []byte) {
-	buf = make([]byte, length)
-	io.ReadFull(r, buf)
-	return
 }
 
 // checkErr 统一处理错误
