@@ -5,9 +5,7 @@ import (
 	"log"
 )
 
-// Value 通用类型
-type Value interface{}
-
+// Decode 对数据进行解码
 func Decode(b []byte) []Value {
 	var r []Value
 

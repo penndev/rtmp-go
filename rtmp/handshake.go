@@ -12,7 +12,7 @@ import (
 
 //Handshake rtmp 简单握手流程
 func Handshake(c *Connnect) error {
-	buf, err := c.ReadBuffer(1537)
+	buf, err := c.Read(1537)
 	if err != nil {
 		return err
 	}
@@ -27,12 +27,11 @@ func Handshake(c *Connnect) error {
 	}
 
 	// <-S0+S1+S2
-	S01T := append(buf, buf[1:5]...)
-	S2 := append(buf[1:5], buf[9:1537]...)
-	S012 := append(S01T, S2...)
+	S2 := buf[1:1537]
+	S012 := append(buf, S2...)
 	c.WriteBuffer(S012)
 
 	// C2->
-	_, err = c.ReadBuffer(1536)
+	_, err = c.Read(1536)
 	return err
 }

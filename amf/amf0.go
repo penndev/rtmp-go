@@ -27,6 +27,9 @@ const (
 	TypeAvmplusObject = 0x11 //切换到amf3
 )
 
+// Value 通用类型
+type Value interface{}
+
 // ReadNumber 读取double的值 8个字节
 func ReadNumber(bytes []byte) float64 {
 	bits := binary.BigEndian.Uint64(bytes[0:8])
@@ -131,4 +134,51 @@ func ReadEcmaObject(bytes []byte) (map[string]Value, int) {
 // ReadNull 读取空类型
 func ReadNull() bool {
 	return false
+}
+
+// WriteNumber 写入数据
+func WriteNumber(s int) []byte {
+	var val []byte
+	val = append(val, 0x00)
+
+	bits := math.Float64bits(float64(s))
+	bytes := make([]byte, 8)
+	binary.BigEndian.PutUint64(bytes, bits)
+	val = append(val, bytes...)
+	return val
+}
+
+// WriteString 写字符串数据
+func WriteString(s string) []byte {
+	var val []byte
+	val = append(val, 0x02)
+	sbyte := []byte(s)
+	sLen := len(sbyte)
+	val = append(val, byte(sLen/256), byte(sLen%56))
+	val = append(val, sbyte...)
+	return val
+}
+
+// WriteObject 写入对象
+func WriteObject(objs map[string]Value) []byte {
+
+	var res []byte
+	res = append(res, 0x03)
+	for i, v := range objs {
+		res = append(res, WriteString(i)[1:]...)
+		switch iType := v.(type) {
+		case string:
+			res = append(res, WriteString(iType)...)
+		case int:
+			res = append(res, WriteNumber(iType)...)
+		default:
+			log.Println("rtmp amf- WriteObject 遇到未处理的数据类型:", iType)
+		}
+	}
+	return append(res, 0, 0, TypeObjectEnd)
+}
+
+// WriteNull 写入
+func WriteNull(v Value) []byte {
+	return []byte{5}
 }

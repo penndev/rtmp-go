@@ -32,7 +32,7 @@ func (chunk *Chunk) readBasicHeader() error {
 		}
 		chunk.SteamID = 64 + uint32(csid)
 	} else if chunk.SteamID == 1 {
-		csid, err := chunk.c.ReadBuffer(2)
+		csid, err := chunk.c.Read(2)
 		if err != nil {
 			return err
 		}
@@ -44,24 +44,28 @@ func (chunk *Chunk) readBasicHeader() error {
 
 //
 func (chunk *Chunk) readMessageHeader() error {
-	if chunk.Format > 3 {
-		errors.New("rtmp chunk steam id > 3")
+
+	if chunk.Format > 3 && chunk.Format < 0 {
+		return errors.New("rtmp chunk steam id > 3")
 	}
 
 	// Type 0 - 1 - 2 had Timestamp
 	if chunk.Format <= 2 {
-		timestamp, err := chunk.c.ReadBuffer(3)
+		timestamp, err := chunk.c.Read(3)
 		if err != nil {
-			return nil
+			return err
 		}
 		timestamp = append(timestamp, 0)
 		chunk.Timestamp = binary.BigEndian.Uint32(timestamp)
+		// If typo = 2,3, had same last value
+		chunk.MessageLength = lastChunk.MessageLength
+		chunk.MessageTypeID = lastChunk.MessageTypeID
 	}
 
 	// type 0 - 1 had MessageLength and MessageType
 	if chunk.Format <= 1 {
 
-		messagelength, err := chunk.c.ReadBuffer(3)
+		messagelength, err := chunk.c.Read(3)
 		messagelength = append([]byte{0}, messagelength...)
 		chunk.MessageLength = binary.BigEndian.Uint32(messagelength)
 
@@ -73,45 +77,53 @@ func (chunk *Chunk) readMessageHeader() error {
 	}
 
 	if chunk.Format == 0 {
-		steamid, err := chunk.c.ReadBuffer(4)
+		steamid, err := chunk.c.Read(4)
 		chunk.MessageStreamID = binary.LittleEndian.Uint32(steamid)
 		if err != nil {
 			return err
 		}
 	}
 	//判断时间戳是否溢出
-	if 2 == 1 {
-
-	}
+	log.Println("cant check Extended Timestamp")
 
 	return nil
 }
 
+var lastChunk Chunk
+
 // ReadChunkMsg 读取一个完整的消息块
 func ReadChunkMsg(c *Connnect) (Chunk, error) {
+
 	var err error
-
 	var readed uint32
-
 	var chunk Chunk
+
 	chunk.c = c
+
 	for {
-		chunk.readBasicHeader()
-		chunk.readMessageHeader()
-		length := chunk.MessageLength - readed
-		if length <= chunk.c.chunkSize {
-			chunk.Payload, err = chunk.c.ReadBuffer(int(length))
+		if err = chunk.readBasicHeader(); err != nil {
+			return chunk, err
+		}
+
+		if err = chunk.readMessageHeader(); err != nil {
+			return chunk, err
+		}
+
+		if length := chunk.MessageLength - readed; length <= chunk.c.chunkSize {
+			chunk.Payload, err = chunk.c.Read(int(length))
 			break
 		}
-		payload := make([]byte, chunk.c.chunkSize)
-		payload, err = chunk.c.ReadBuffer(int(chunk.c.chunkSize))
-		chunk.Payload = append(chunk.Payload, payload...)
-		readed += chunk.c.chunkSize //标记已经读取的位数
 
-		if err != nil {
-			return chunk, nil
+		payload := make([]byte, chunk.c.chunkSize)
+		if payload, err = chunk.c.Read(int(chunk.c.chunkSize)); err != nil {
+			break
 		}
+		chunk.Payload = append(chunk.Payload, payload...)
+
+		readed += chunk.c.chunkSize //标记已经读取的位数
 	}
-	log.Println(chunk.Format, chunk.SteamID, chunk.Timestamp, chunk.MessageLength, chunk.MessageTypeID, chunk.MessageStreamID, chunk.Payload)
+
+	lastChunk = chunk
+	//log.Println(chunk.Format, chunk.SteamID, chunk.Timestamp, chunk.MessageLength, chunk.MessageTypeID, chunk.MessageStreamID, chunk.Payload)
 	return chunk, err
 }

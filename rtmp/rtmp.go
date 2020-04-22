@@ -2,6 +2,7 @@ package rtmp
 
 import (
 	"bufio"
+	"encoding/binary"
 	"io"
 	"log"
 	"net"
@@ -28,8 +29,8 @@ func (c *Connnect) Close() {
 	log.Println("Conn is close :", c.remoteAddr)
 }
 
-// ReadBuffer 读取net.Conn 数据，并且增加统计
-func (c *Connnect) ReadBuffer(length int) ([]byte, error) {
+// Read 读取net.Conn 数据，并且增加统计
+func (c *Connnect) Read(length int) ([]byte, error) {
 	buf := make([]byte, length)
 	l, err := io.ReadFull(c.r, buf)
 	c.rwByteSize["read"] += uint32(l)
@@ -56,20 +57,52 @@ func (c *Connnect) HandShake() error {
 	return err
 }
 
-//ReadRtmpMsg 读取一个需要处理的消息。
-//循环处理，如果是协议控制消息则继续读取。
-func (c *Connnect) ReadRtmpMsg() (Chunk, error) {
-
+//ReadMsg 读取一个需要处理的消息。循环处理，如果是协议控制消息则继续读取。
+func (c *Connnect) ReadMsg() (Chunk, error) {
 	msg, err := ReadChunkMsg(c)
 	if err != nil {
-		log.Println(err)
+		return msg, err
 	}
-
-	if msg.MessageTypeID == 0x11 {
-
+	// 处理与提取Msg无关的控制协议。
+	switch int(msg.MessageTypeID) {
+	case SetChunkSize:
+		c.chunkSize = binary.BigEndian.Uint32(msg.Payload)
+		log.Println("Rtmp SetChunkSize", c.chunkSize)
+		msg, err = c.ReadMsg()
+	case AbortMessage:
+		log.Println("Rtmp AbortMessage")
+		msg, err = c.ReadMsg()
+	case Acknowledgement:
+		log.Println("Rtmp Acknowledgement")
+		msg, err = c.ReadMsg()
+	case WindowAcknowledgementSize:
+		log.Println("Rtmp WindowAcknowledgementSize")
+		msg, err = c.ReadMsg()
+	case SetPeerBandwidth:
+		log.Println("Rtmp SetPeerBandwidth")
+		msg, err = c.ReadMsg()
 	}
 
 	return msg, err
+}
+
+//Steam 处理流数据
+func (c *Connnect) Steam() error {
+	// 处理消息
+	for {
+
+		msg, err := c.ReadMsg()
+		if err != nil {
+			return err
+		}
+
+		switch int(msg.MessageTypeID) {
+		case CommandMessageAMF0:
+			CommandMessage(&msg)
+		default:
+			log.Println("new msg:Typeid,MsgLength,Steamid", msg.MessageTypeID, msg.MessageLength, msg.MessageStreamID)
+		}
+	}
 }
 
 // NewConnnect 初始化一个新的链接。
