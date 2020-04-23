@@ -43,6 +43,8 @@ func CommandMessage(msg *Chunk) {
 		msg.c.WriteBuffer(ReplyCreateStream())
 	case "publish":
 		msg.c.WriteBuffer(ReplyPublish())
+	default:
+		log.Println("Oop Cant find the amf command:", amfItem)
 	}
 }
 

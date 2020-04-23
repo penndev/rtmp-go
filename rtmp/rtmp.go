@@ -86,25 +86,6 @@ func (c *Connnect) ReadMsg() (Chunk, error) {
 	return msg, err
 }
 
-//Steam 处理流数据
-func (c *Connnect) Steam() error {
-	// 处理消息
-	for {
-
-		msg, err := c.ReadMsg()
-		if err != nil {
-			return err
-		}
-
-		switch int(msg.MessageTypeID) {
-		case CommandMessageAMF0:
-			CommandMessage(&msg)
-		default:
-			log.Println("new msg:Typeid,MsgLength,Steamid", msg.MessageTypeID, msg.MessageLength, msg.MessageStreamID)
-		}
-	}
-}
-
 // NewConnnect 初始化一个新的链接。
 func NewConnnect(conn net.Conn) Connnect {
 	var c Connnect
