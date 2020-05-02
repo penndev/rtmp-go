@@ -39,6 +39,8 @@ func CommandMessage(msg *Chunk) {
 	switch amfItem[0] {
 	case "connect":
 		msg.c.WriteBuffer(append(ReplySetChunkSize(), ReplyConnect("_result")...))
+	case "releaseStream", "FCPublish":
+
 	case "createStream":
 		msg.c.WriteBuffer(ReplyCreateStream())
 	case "publish":

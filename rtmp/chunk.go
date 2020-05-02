@@ -3,7 +3,6 @@ package rtmp
 import (
 	"encoding/binary"
 	"errors"
-	"log"
 )
 
 // Chunk 处理rtmp中的流数据
@@ -55,7 +54,8 @@ func (chunk *Chunk) readMessageHeader() error {
 		if err != nil {
 			return err
 		}
-		timestamp = append(timestamp, 0)
+		adr := []byte{0}
+		timestamp = append(adr, timestamp...)
 		chunk.Timestamp = binary.BigEndian.Uint32(timestamp)
 		// If typo = 2,3, had same last value
 		chunk.MessageLength = lastChunk.MessageLength
@@ -83,8 +83,15 @@ func (chunk *Chunk) readMessageHeader() error {
 			return err
 		}
 	}
-	//判断时间戳是否溢出
-	log.Println("cant check Extended Timestamp")
+
+	//判断时间拓展字段是否存在-
+	if chunk.Timestamp > 0xFFFFFF {
+		extendTimestamp, err := chunk.c.Read(4)
+		if err != nil {
+			return err
+		}
+		chunk.ExtendTimestamp = binary.BigEndian.Uint32(extendTimestamp)
+	}
 
 	return nil
 }
@@ -110,7 +117,9 @@ func ReadChunkMsg(c *Connnect) (Chunk, error) {
 		}
 
 		if length := chunk.MessageLength - readed; length <= chunk.c.chunkSize {
-			chunk.Payload, err = chunk.c.Read(int(length))
+			var Payload []byte
+			Payload, err = chunk.c.Read(int(length))
+			chunk.Payload = append(chunk.Payload, Payload...)
 			break
 		}
 
@@ -124,6 +133,7 @@ func ReadChunkMsg(c *Connnect) (Chunk, error) {
 	}
 
 	lastChunk = chunk
+
 	//log.Println(chunk.Format, chunk.SteamID, chunk.Timestamp, chunk.MessageLength, chunk.MessageTypeID, chunk.MessageStreamID, chunk.Payload)
 	return chunk, err
 }
