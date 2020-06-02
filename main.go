@@ -1,11 +1,19 @@
 package main
 
 import (
+	"io"
+	"log"
+	"net/http"
+
 	"github.com/pennfly/rtmp-go/rtmp"
 )
 
 func main() {
-	var rtmp rtmp.Service
-	rtmp.Listen = ":1935"
-	rtmp.Server()
+	helloHandler := func(w http.ResponseWriter, req *http.Request) {
+		io.WriteString(w, "Hello, world!\n")
+	}
+	http.HandleFunc("/hello", helloHandler)
+	log.Fatal(http.ListenAndServe(":8080", nil))
+
+	rtmp.Serve()
 }

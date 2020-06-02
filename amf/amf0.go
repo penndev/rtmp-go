@@ -71,8 +71,12 @@ func ReadObject(bytes []byte) map[string]Value {
 			start := vStart + 3
 			end = start + int(binary.BigEndian.Uint16(bytes[vStart+1:start]))
 			val = ReadString(bytes[start:end])
+		case TypeBoolean:
+			start := vStart + 1
+			end = start + 1
+			val = ReadBoolean(bytes[start:end])
 		default:
-			log.Println("遇到未处理的数据类型ReadObject:", bytes)
+			log.Println("ReadObject:", vStart, bytes)
 			val = nil
 		}
 

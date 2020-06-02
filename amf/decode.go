@@ -8,7 +8,7 @@ import (
 // Decode 对数据进行解码
 func Decode(b []byte) []Value {
 	var r []Value
-
+	//log.Println(b)
 	for len(b) > 0 {
 		var val Value
 		switch b[0] {
@@ -42,17 +42,13 @@ func Decode(b []byte) []Value {
 			val, end = ReadEcmaObject(b[1:])
 			b = b[end:]
 		default:
-			log.Println("rtmp amf-遇到未处理的数据类型:")
+			log.Println("Rtmp amf 未处理的数据类型  ->:", b)
 			val = nil
 		}
-
 		if val == nil {
 			break
 		}
-
 		r = append(r, val)
-
 	}
-
 	return r
 }
