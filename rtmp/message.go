@@ -50,8 +50,8 @@ func (m *Message) connectResult() {
 	c.SendChunk()
 }
 
-func (m *Message) createSteamResult() {
-	repByte := amf.Encode([]amf.Value{"_result", 4, nil, 4})
+func (m *Message) createSteamResult(n int) {
+	repByte := amf.Encode([]amf.Value{"_result", n, nil, n})
 	c := Chunk{
 		MessageTypeID: 20,
 		SteamID:       3,
@@ -80,17 +80,20 @@ func (m *Message) publishResult() {
 }
 
 func (m *Message) createSteam(item []amf.Value) {
-
+	log.Println("Rtmp Message", item[0])
 	switch item[0] {
 	case "connect":
 		m.setChunkSize()
 		m.connectResult()
 	case "createStream":
-		m.createSteamResult()
+		tID := item[1]
+		t, ok := tID.(float64)
+		if !ok {
+			t = 0
+		}
+		m.createSteamResult(int(t))
 	case "publish":
 		m.publishResult()
-	default:
-
 	}
 }
 

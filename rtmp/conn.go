@@ -28,6 +28,7 @@ type Conn struct {
 	ReadChunkSize  int
 	WriteChunkSize int
 	SteamID        uint32
+	ChunkLists     map[uint32]Chunk
 }
 
 func (c *Conn) handShake() error {
@@ -94,12 +95,15 @@ func newConn(srv *Server, rw net.Conn) *Conn {
 		Server:         srv,
 		ReadChunkSize:  srv.ChunkSize, //单个client独立一个chunksize。
 		WriteChunkSize: 4096,
-		SteamID:        2,
-		rwc:            rw,
-		r:              bufio.NewReader(rw),
-		w:              bufio.NewWriter(rw),
-		remoteAddr:     rw.RemoteAddr().String(),
-		rwByteSize:     &rwByteSize{},
+
+		rwc:        rw,
+		r:          bufio.NewReader(rw),
+		w:          bufio.NewWriter(rw),
+		remoteAddr: rw.RemoteAddr().String(),
+		rwByteSize: &rwByteSize{},
+
+		SteamID:    2,
+		ChunkLists: make(map[uint32]Chunk),
 	}
 	return conn
 }

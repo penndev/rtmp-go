@@ -20,6 +20,7 @@ type Chunk struct {
 	Conn *Conn
 }
 
+//SendChunk 发送消息。
 func (chk *Chunk) SendChunk() error {
 	cache := make([]byte, 4)
 	write := []byte{}
@@ -71,10 +72,16 @@ func (chk *Chunk) readBasicHeader() error {
 }
 
 // 读取消息头。
-func (chk *Chunk) readMessageHeader() error {
+func (chk *Chunk) readMessageHeader(readed int) error {
 
 	if chk.Format > 3 && chk.Format < 0 {
 		return errors.New("rtmp chk steam id > 3")
+	}
+
+	if _, ok := chk.Conn.ChunkLists[chk.SteamID]; ok && readed == 0 && chk.Format > 1 {
+		chk.MessageLength = chk.Conn.ChunkLists[chk.SteamID].MessageLength
+		chk.MessageTypeID = chk.Conn.ChunkLists[chk.SteamID].MessageTypeID
+		chk.MessageStreamID = chk.Conn.ChunkLists[chk.SteamID].MessageStreamID
 	}
 
 	// Type 0 - 1 - 2 had Timestamp
@@ -86,9 +93,6 @@ func (chk *Chunk) readMessageHeader() error {
 		adr := []byte{0}
 		timestamp = append(adr, timestamp...)
 		chk.Timestamp = binary.BigEndian.Uint32(timestamp)
-		// If typo = 2,3, had same last value
-		// chk.MessageLength = chk.MessageLength
-		// chk.MessageTypeID = chk.MessageTypeID
 	}
 
 	// type 0 - 1 had MessageLength and MessageType
@@ -134,12 +138,11 @@ func (chk *Chunk) originMessage() error {
 			return err
 		}
 
-		if err := chk.readMessageHeader(); err != nil {
+		if err := chk.readMessageHeader(readed); err != nil {
 			return err
 		}
 		//是否可以结束读取。。
 		if length := int(chk.MessageLength) - readed; length <= chk.Conn.ReadChunkSize {
-
 			Payload, err := chk.Conn.ReadFull(length)
 			if err != nil {
 				return err
@@ -147,6 +150,7 @@ func (chk *Chunk) originMessage() error {
 			chk.Payload = append(chk.Payload, Payload...)
 			return nil
 		}
+
 		Payload, err := chk.Conn.ReadFull(chk.Conn.ReadChunkSize)
 		if err != nil {
 			return err
@@ -163,6 +167,13 @@ func (chk *Chunk) ReadMsg() error {
 	err := chk.originMessage()
 	if err != nil {
 		return err
+	}
+
+	//更新chunklist 最后一次的header
+	chk.Conn.ChunkLists[chk.SteamID] = Chunk{
+		MessageLength:   chk.MessageLength,
+		MessageTypeID:   chk.MessageTypeID,
+		MessageStreamID: chk.MessageStreamID,
 	}
 
 	// 处理与提取Msg无关的控制协议。
