@@ -7,6 +7,7 @@ import (
 	"github.com/pennfly/rtmp-go/amf"
 )
 
+// Message 详细消息处理。
 type Message struct {
 	Conn   *Conn
 	Server *Server
@@ -25,7 +26,21 @@ func (m *Message) setChunkSize() {
 	c.SendChunk()
 }
 
-func (m *Message) connectResult() {
+func (m *Message) streamBegin() {
+	payloadByte := make([]byte, 4)
+	controType := []byte{0, 0}
+	binary.BigEndian.PutUint32(payloadByte, 0)
+	payloadByte = append(controType, payloadByte...)
+	c := Chunk{
+		MessageTypeID: 4,
+		SteamID:       m.Conn.SteamID,
+		Payload:       payloadByte,
+		Conn:          m.Conn,
+	}
+	c.SendChunk()
+}
+
+func (m *Message) respConnect() {
 
 	var arrSour []amf.Value
 
@@ -50,7 +65,7 @@ func (m *Message) connectResult() {
 	c.SendChunk()
 }
 
-func (m *Message) createSteamResult(n int) {
+func (m *Message) respCreateSteam(n int) {
 	repByte := amf.Encode([]amf.Value{"_result", n, nil, n})
 	c := Chunk{
 		MessageTypeID: 20,
@@ -61,8 +76,7 @@ func (m *Message) createSteamResult(n int) {
 	c.SendChunk()
 }
 
-func (m *Message) publishResult() {
-
+func (m *Message) respPublish() {
 	res := make(map[string]amf.Value)
 	res["level"] = "status"
 	res["code"] = "NetStream.Publish.Start"
@@ -76,38 +90,57 @@ func (m *Message) publishResult() {
 		Conn:          m.Conn,
 	}
 	c.SendChunk()
-
 }
 
-func (m *Message) createSteam(item []amf.Value) {
-	log.Println("Rtmp Message", item[0])
+func (m *Message) respPlay() {
+	res := make(map[string]amf.Value)
+	res["level"] = "status"
+	res["code"] = "NetStream.Play.Start"
+	res["description"] = "Start playing"
+	resp := []amf.Value{"onStatus", 0, nil, res}
+
+	c := Chunk{
+		MessageTypeID: 20,
+		SteamID:       4,
+		Payload:       amf.Encode(resp),
+		Conn:          m.Conn,
+	}
+	c.SendChunk()
+}
+
+func (m *Message) createSteam() {
+	item := amf.Decode(m.Chunk.Payload)
+
 	switch item[0] {
 	case "connect":
 		m.setChunkSize()
-		m.connectResult()
+		m.respConnect()
 	case "createStream":
 		tID := item[1]
 		t, ok := tID.(float64)
 		if !ok {
 			t = 0
 		}
-		m.createSteamResult(int(t))
+		m.respCreateSteam(int(t))
 	case "publish":
-		m.publishResult()
+		m.respPublish()
+	case "play":
+		m.streamBegin() // m.StreamIsRecorded
+		m.respPlay()    // onStatus-play-reset
+	default:
+		log.Println("Rtmp Message not resp:->", item[0])
 	}
 }
 
-func (m *Message) doAction() {
+//分发消息。
+func (m *Message) assort() {
 	switch m.Chunk.MessageTypeID {
 	case 20, 17:
-		item := amf.Decode(m.Chunk.Payload)
-		if len(item) >= 1 {
-			m.createSteam(item)
-		}
+		m.createSteam()
 	case 18, 15, 8, 9:
 		//发送video Data
 	default:
-		log.Println("rtmp create steam had err typeid ->:", m.Chunk.MessageTypeID)
+		log.Println("Rtmp Message had err typeid ->:", m.Chunk.MessageTypeID)
 	}
 }
 
@@ -117,7 +150,6 @@ func newMessage(chk *Chunk) error {
 		Conn:   chk.Conn,
 		Server: chk.Conn.Server,
 	}
-	msg.doAction()
-
+	msg.assort()
 	return nil
 }
