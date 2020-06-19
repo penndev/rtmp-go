@@ -16,7 +16,7 @@ func Encode(val []Value) []byte {
 		case nil:
 			res = append(res, WriteNull(iType)...)
 		default:
-			log.Println("rtmp amf-Encode 遇到未处理的数据类型：", iType)
+			log.Println("rtmp amf-Encode 遇到未处理的数据类型：", val, v, iType)
 		}
 	}
 	return res

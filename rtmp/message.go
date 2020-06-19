@@ -19,7 +19,7 @@ func (m *Message) setChunkSize() {
 	binary.BigEndian.PutUint32(payloadByte, uint32(m.Conn.WriteChunkSize))
 	c := Chunk{
 		MessageTypeID: 1,
-		SteamID:       m.Conn.SteamID,
+		SteamID:       2,
 		Payload:       payloadByte,
 		Conn:          m.Conn,
 	}
@@ -29,54 +29,28 @@ func (m *Message) setChunkSize() {
 func (m *Message) streamBegin() {
 	payloadByte := make([]byte, 4)
 	controType := []byte{0, 0}
-	binary.BigEndian.PutUint32(payloadByte, 0)
+	binary.BigEndian.PutUint32(payloadByte, 4)
 	payloadByte = append(controType, payloadByte...)
 	c := Chunk{
 		MessageTypeID: 4,
-		SteamID:       m.Conn.SteamID,
+		SteamID:       3,
 		Payload:       payloadByte,
 		Conn:          m.Conn,
 	}
 	c.SendChunk()
 }
 
-func (m *Message) respConnect() {
+func (m *Message) respPublish(steam amf.Value) {
 
-	var arrSour []amf.Value
-
-	repVer := make(map[string]amf.Value)
-	repVer["fmsVer"] = "FMS/3,0,1,123"
-	repVer["capabilities"] = 31
-
-	repStatus := make(map[string]amf.Value)
-	repStatus["level"] = "status"
-	repStatus["code"] = "NetConnection.Connect.Success"
-	repStatus["description"] = "Connection succeeded"
-	repStatus["objectEncoding"] = 0
-
-	repSour := append(arrSour, "_result", 1, repVer, repStatus)
-
-	c := Chunk{
-		MessageTypeID: 20,
-		SteamID:       m.Conn.SteamID,
-		Payload:       amf.Encode(repSour),
-		Conn:          m.Conn,
+	m.Conn.Stream = steam.(string)
+	pusher := make(chan byte)
+	log.Println("live name := ", m.Conn.App+"/"+m.Conn.Stream)
+	m.Server.WorkPool[m.Conn.App+"/"+m.Conn.Stream] = &WorkPool{
+		Pusher:   pusher,
+		Metadata: Chunk{},
+		Player:   []chan Chunk{},
 	}
-	c.SendChunk()
-}
 
-func (m *Message) respCreateSteam(n int) {
-	repByte := amf.Encode([]amf.Value{"_result", n, nil, n})
-	c := Chunk{
-		MessageTypeID: 20,
-		SteamID:       3,
-		Payload:       repByte,
-		Conn:          m.Conn,
-	}
-	c.SendChunk()
-}
-
-func (m *Message) respPublish() {
 	res := make(map[string]amf.Value)
 	res["level"] = "status"
 	res["code"] = "NetStream.Publish.Start"
@@ -92,7 +66,16 @@ func (m *Message) respPublish() {
 	c.SendChunk()
 }
 
-func (m *Message) respPlay() {
+func (m *Message) respPlay(steam amf.Value) {
+	m.Conn.Stream = steam.(string)
+	name := m.Conn.App + "/" + m.Conn.Stream
+	if _, ok := m.Server.WorkPool[name]; !ok {
+		m.Conn.Close()
+		return
+	}
+
+	m.streamBegin()
+
 	res := make(map[string]amf.Value)
 	res["level"] = "status"
 	res["code"] = "NetStream.Play.Start"
@@ -106,29 +89,92 @@ func (m *Message) respPlay() {
 		Conn:          m.Conn,
 	}
 	c.SendChunk()
+
+	defer func() {
+		metadata := m.Server.WorkPool[name].Metadata
+		metadata.Conn = m.Conn
+		metadata.SendChunk()
+
+		player := make(chan Chunk)
+		m.Server.WorkPool[name].Player = append(m.Server.WorkPool[name].Player, player)
+		for {
+			x := <-player
+			//log.Println(x.Format, x.SteamID, x.Timestamp, x.MessageLength, x.MessageTypeID, x.MessageStreamID)
+			x.Conn = m.Conn
+			if err := x.SendChunk(); err != nil {
+				log.Println(err)
+				break
+			}
+		}
+	}()
+
+}
+
+func (m *Message) respCreateSteam(nmb amf.Value) {
+	t, ok := nmb.(float64)
+	if !ok {
+		t = 0
+	}
+	repByte := amf.Encode([]amf.Value{"_result", int(t), nil, int(t)})
+	c := Chunk{
+		MessageTypeID: 20,
+		SteamID:       3,
+		Payload:       repByte,
+		Conn:          m.Conn,
+	}
+	c.SendChunk()
+}
+
+func (m *Message) respConnect(amfObj amf.Value) {
+	m.setChunkSize()
+	//set conn app
+	app, ok := amfObj.(map[string]amf.Value)
+	if !ok {
+		m.Conn.Close()
+	}
+	m.Conn.App = app["app"].(string)
+	//resp connect
+	var arrSour []amf.Value
+	repVer := make(map[string]amf.Value)
+	repVer["fmsVer"] = "FMS/3,0,1,123"
+	repVer["capabilities"] = 31
+	repStatus := make(map[string]amf.Value)
+	repStatus["level"] = "status"
+	repStatus["code"] = "NetConnection.Connect.Success"
+	repStatus["description"] = "Connection succeeded"
+	repStatus["objectEncoding"] = 0
+	// _error or _result
+	repSour := append(arrSour, "_result", 1, repVer, repStatus)
+	c := Chunk{
+		MessageTypeID: 20,
+		SteamID:       m.Conn.SteamID,
+		Payload:       amf.Encode(repSour),
+		Conn:          m.Conn,
+	}
+	c.SendChunk()
 }
 
 func (m *Message) createSteam() {
 	item := amf.Decode(m.Chunk.Payload)
-
 	switch item[0] {
 	case "connect":
-		m.setChunkSize()
-		m.respConnect()
+		m.respConnect(item[2])
 	case "createStream":
-		tID := item[1]
-		t, ok := tID.(float64)
-		if !ok {
-			t = 0
-		}
-		m.respCreateSteam(int(t))
+		m.respCreateSteam(item[1])
 	case "publish":
-		m.respPublish()
+		m.respPublish(item[3])
 	case "play":
-		m.streamBegin() // m.StreamIsRecorded
-		m.respPlay()    // onStatus-play-reset
+		m.respPlay(item[3]) // onStatus-play-reset
 	default:
 		log.Println("Rtmp Message not resp:->", item[0])
+	}
+}
+
+func (m *Message) sendAvPack() {
+	//
+	play := &m.Server.WorkPool[m.Conn.App+"/"+m.Conn.Stream].Player
+	for _, v := range *play {
+		v <- *m.Chunk
 	}
 }
 
@@ -137,8 +183,10 @@ func (m *Message) assort() {
 	switch m.Chunk.MessageTypeID {
 	case 20, 17:
 		m.createSteam()
-	case 18, 15, 8, 9:
-		//发送video Data
+	case 18, 15:
+		m.Server.WorkPool[m.Conn.App+"/"+m.Conn.Stream].Metadata = *m.Chunk
+	case 9, 8:
+		m.sendAvPack()
 	default:
 		log.Println("Rtmp Message had err typeid ->:", m.Chunk.MessageTypeID)
 	}

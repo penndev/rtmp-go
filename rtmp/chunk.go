@@ -2,7 +2,6 @@ package rtmp
 
 import (
 	"encoding/binary"
-	"errors"
 	"log"
 )
 
@@ -18,34 +17,6 @@ type Chunk struct {
 	Payload         []byte
 
 	Conn *Conn
-}
-
-//SendChunk 发送消息。
-func (chk *Chunk) SendChunk() error {
-	cache := make([]byte, 4)
-	write := []byte{}
-
-	if chk.SteamID < 64 {
-		write = append(write, byte(chk.SteamID))
-	}
-
-	if chk.Timestamp == 0 {
-		write = append(write, 0, 0, 0)
-	}
-
-	msgLen := uint32(len(chk.Payload))
-	binary.BigEndian.PutUint32(cache, msgLen)
-	write = append(write, cache[1:]...)
-
-	write = append(write, chk.MessageTypeID)
-
-	binary.BigEndian.PutUint32(cache, chk.MessageStreamID)
-	write = append(write, cache...)
-
-	write = append(write, chk.Payload...)
-	//log.Println(write)
-	_, err := chk.Conn.Write(write)
-	return err
 }
 
 // 读取基础头。
@@ -71,21 +42,50 @@ func (chk *Chunk) readBasicHeader() error {
 	return err
 }
 
-// 读取消息头。
-func (chk *Chunk) readMessageHeader(readed int) error {
+// 制作基础头。
+// Chunk Basic  Header field may be 1, 2, or 3 bytes, depending on the chunk stream ID.
+// The protocol supports up to 65597 streams with IDs 3-65599.
+//  2-63  leng = 1
+// Value 0 indicates the 2 byte ；  64-319 (the second byte + 64)
+// Value 1 indicates  the 3 byte；  64-65599 ((the third byte)*256 + the second byte + 64)
+func (chk *Chunk) genBasicHeader() []byte {
+	BasicHead := make([]byte, 1)
+	Format := int(chk.Format) << 6
+	FirstSteam := int(chk.SteamID)
 
-	if chk.Format > 3 && chk.Format < 0 {
-		return errors.New("rtmp chk steam id > 3")
+	if FirstSteam > 1 && FirstSteam < 64 {
+		BasicHead[0] = byte(Format + FirstSteam)
+		return BasicHead
+	}
+	// value 0
+	if FirstSteam > 63 && FirstSteam < 320 {
+		BasicHead[0] = byte(Format)
+		return append(BasicHead, byte(FirstSteam-64))
+	}
+	// valuee 1
+	if FirstSteam > 63 && FirstSteam < 65510 {
+		BasicHead[0] = byte(Format + 1)
+		Second := FirstSteam - 64
+		if Second > 255 {
+			BasicHead = append(BasicHead, byte(Second%256))
+			BasicHead = append(BasicHead, byte(Second/256))
+		} else {
+			BasicHead = append(BasicHead, byte(Second), 0)
+		}
 	}
 
-	if _, ok := chk.Conn.ChunkLists[chk.SteamID]; ok && readed == 0 && chk.Format > 1 {
-		chk.MessageLength = chk.Conn.ChunkLists[chk.SteamID].MessageLength
-		chk.MessageTypeID = chk.Conn.ChunkLists[chk.SteamID].MessageTypeID
-		chk.MessageStreamID = chk.Conn.ChunkLists[chk.SteamID].MessageStreamID
+	return BasicHead
+}
+
+// 读取消息头。
+func (chk *Chunk) readMessageHeader() error {
+
+	if chk.Format > 2 {
+		return nil
 	}
 
 	// Type 0 - 1 - 2 had Timestamp
-	if chk.Format <= 2 {
+	if chk.Format < 3 {
 		timestamp, err := chk.Conn.ReadFull(3)
 		if err != nil {
 			return err
@@ -93,10 +93,17 @@ func (chk *Chunk) readMessageHeader(readed int) error {
 		adr := []byte{0}
 		timestamp = append(adr, timestamp...)
 		chk.Timestamp = binary.BigEndian.Uint32(timestamp)
+
+		if chunk, ok := chk.Conn.ChunkLists[chk.SteamID]; ok {
+			chk.MessageLength = chunk.MessageLength
+			chk.MessageTypeID = chunk.MessageTypeID
+			chk.MessageStreamID = chunk.MessageStreamID
+		}
+
 	}
 
 	// type 0 - 1 had MessageLength and MessageType
-	if chk.Format <= 1 {
+	if chk.Format < 2 {
 
 		messagelength, err := chk.Conn.ReadFull(3)
 		messagelength = append([]byte{0}, messagelength...)
@@ -109,7 +116,7 @@ func (chk *Chunk) readMessageHeader(readed int) error {
 		}
 	}
 
-	if chk.Format == 0 {
+	if chk.Format < 1 {
 		steamid, err := chk.Conn.ReadFull(4)
 		chk.MessageStreamID = binary.LittleEndian.Uint32(steamid)
 		if err != nil {
@@ -118,7 +125,7 @@ func (chk *Chunk) readMessageHeader(readed int) error {
 	}
 
 	//判断时间拓展字段是否存在-
-	if chk.Timestamp > 0xFFFFFF {
+	if chk.Timestamp == 0xFFFFFF {
 		extendTimestamp, err := chk.Conn.ReadFull(4)
 		if err != nil {
 			return err
@@ -129,36 +136,77 @@ func (chk *Chunk) readMessageHeader(readed int) error {
 	return nil
 }
 
+// 制作消息头
+//
+func (chk *Chunk) genMessageHeader() []byte {
+	if chk.Format > 2 || chk.Format < 0 {
+		return nil
+	}
+	var headArr []byte
+	// Type 0 - 1 - 2 had Timestamp
+	if chk.Format < 3 {
+		readTime := make([]byte, 4)
+		binary.BigEndian.PutUint32(readTime, chk.Timestamp)
+		headArr = readTime[1:]
+	}
+	// type 0 - 1 had MessageLength and MessageType
+	if chk.Format < 2 {
+		readLen := make([]byte, 4)
+		binary.BigEndian.PutUint32(readLen, chk.MessageLength)
+		headArr = append(headArr, readLen[1:]...)
+		headArr = append(headArr, chk.MessageTypeID)
+	}
+	// type 0 had steam id
+	if chk.Format < 1 {
+		readSteamid := make([]byte, 4)
+		binary.BigEndian.PutUint32(readSteamid, chk.MessageStreamID)
+		headArr = append(headArr, readSteamid...)
+	}
+
+	if chk.Timestamp == 0xFFFFFF {
+		readExtedtime := make([]byte, 4)
+		binary.BigEndian.PutUint32(readExtedtime, chk.ExtendTimestamp)
+		headArr = append(headArr, readExtedtime...)
+	}
+	return headArr
+}
+
 // 读取源消息。
 func (chk *Chunk) originMessage() error {
 	var readed int
 	chk.Payload = []byte{}
 	for {
+		//读基础头
 		if err := chk.readBasicHeader(); err != nil {
 			return err
 		}
-
-		if err := chk.readMessageHeader(readed); err != nil {
+		//读消息头
+		if err := chk.readMessageHeader(); err != nil {
 			return err
 		}
-		//是否可以结束读取。。
-		if length := int(chk.MessageLength) - readed; length <= chk.Conn.ReadChunkSize {
-			Payload, err := chk.Conn.ReadFull(length)
-			if err != nil {
-				return err
-			}
+		//判断本次读取的消息长度。
+		length := int(chk.MessageLength) - readed
+		if length > chk.Conn.ReadChunkSize {
+			length = chk.Conn.ReadChunkSize
+		}
+
+		//读取消息。
+		if Payload, err := chk.Conn.ReadFull(length); err == nil {
 			chk.Payload = append(chk.Payload, Payload...)
-			return nil
-		}
-
-		Payload, err := chk.Conn.ReadFull(chk.Conn.ReadChunkSize)
-		if err != nil {
+		} else {
 			return err
 		}
-		chk.Payload = append(chk.Payload, Payload...)
 
-		readed += chk.Conn.ReadChunkSize //标记已经读取的位数
+		//读取结束，退出循环。
+		readed += length
+		if uint32(readed) >= chk.MessageLength {
+			break
+		}
 	}
+
+	chk.Conn.ChunkLists[chk.SteamID] = *chk
+
+	return nil
 }
 
 //ReadMsg 读取消息。
@@ -167,13 +215,6 @@ func (chk *Chunk) ReadMsg() error {
 	err := chk.originMessage()
 	if err != nil {
 		return err
-	}
-
-	//更新chunklist 最后一次的header
-	chk.Conn.ChunkLists[chk.SteamID] = Chunk{
-		MessageLength:   chk.MessageLength,
-		MessageTypeID:   chk.MessageTypeID,
-		MessageStreamID: chk.MessageStreamID,
 	}
 
 	// 处理与提取Msg无关的控制协议。
@@ -200,6 +241,48 @@ func (chk *Chunk) ReadMsg() error {
 	}
 
 	return err
+}
+
+//SendChunk 发送消息。
+func (chk *Chunk) SendChunk() error {
+	if chk.MessageLength == 0 {
+		chk.MessageLength = uint32(len(chk.Payload))
+	}
+	chk.Format = 0
+
+	var mArr []byte
+	mArr = chk.genBasicHeader()
+	mArr = append(mArr, chk.genMessageHeader()...)
+	writeSize := 0
+	payloadSize := int(chk.MessageLength)
+	for {
+		slicSize := writeSize + chk.Conn.WriteChunkSize
+		if slicSize > payloadSize {
+			slicSize = payloadSize //最后一次剩余的切片。
+		}
+		payload := chk.Payload[writeSize:slicSize]
+		// check fill message header
+		if writeSize == 0 {
+			mArr = append(mArr, payload...)
+		} else {
+			chk.Format = 3
+			mArr = chk.genBasicHeader()
+			mArr = append(mArr, payload...)
+		}
+		//
+		_, err := chk.Conn.Write(mArr)
+		if err != nil {
+			log.Println("message error->", err)
+			return err
+		}
+		//发送完成
+		mArr = []byte{}
+		if slicSize == payloadSize {
+			break
+		}
+		writeSize = slicSize
+	}
+	return nil
 }
 
 func newChunk(conn *Conn) *Chunk {

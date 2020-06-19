@@ -29,6 +29,8 @@ type Conn struct {
 	WriteChunkSize int
 	SteamID        uint32
 	ChunkLists     map[uint32]Chunk
+	App            string
+	Stream         string
 }
 
 func (c *Conn) handShake() error {
@@ -102,7 +104,7 @@ func newConn(srv *Server, rw net.Conn) *Conn {
 		remoteAddr: rw.RemoteAddr().String(),
 		rwByteSize: &rwByteSize{},
 
-		SteamID:    2,
+		SteamID:    3,
 		ChunkLists: make(map[uint32]Chunk),
 	}
 	return conn
