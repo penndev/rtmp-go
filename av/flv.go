@@ -88,10 +88,10 @@ func (f *FLV) Close() {
 }
 
 //GenFlv 生成新的flv
-func (f *FLV) GenFlv() error {
+func (f *FLV) GenFlv(name string) error {
 	// -
 	var err error
-	f.File, err = os.OpenFile("out.flv", os.O_WRONLY|os.O_CREATE, 0644)
+	f.File, err = os.OpenFile(name+".flv", os.O_WRONLY|os.O_CREATE, 0644)
 	if err != nil {
 		log.Println(err)
 	}

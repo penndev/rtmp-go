@@ -22,6 +22,7 @@ type Chunk struct {
 // 读取基础头。
 func (chk *Chunk) readBasicHeader() error {
 	basicHeader, err := chk.Conn.ReadByte()
+
 	chk.Format = basicHeader >> 6
 	chk.SteamID = uint32(basicHeader & 0x3f)
 
@@ -79,51 +80,49 @@ func (chk *Chunk) genBasicHeader() []byte {
 
 // 读取消息头。
 func (chk *Chunk) readMessageHeader() error {
-
+	// type 3
 	if chk.Format > 2 {
+		if chunk, ok := chk.Conn.ChunkLists[chk.SteamID]; ok {
+			//防止隔流串联type = 3
+			chk.MessageLength = chunk.MessageLength
+			chk.MessageTypeID = chunk.MessageTypeID
+			chk.MessageStreamID = chunk.MessageStreamID
+
+		}
 		return nil
 	}
-
 	// Type 0 - 1 - 2 had Timestamp
 	if chk.Format < 3 {
-		timestamp, err := chk.Conn.ReadFull(3)
-		if err != nil {
+		if timestamp, err := chk.Conn.ReadFull(3); err == nil {
+			timestamp = append([]byte{0}, timestamp...)
+			chk.Timestamp = binary.BigEndian.Uint32(timestamp)
+		} else {
 			return err
 		}
-		adr := []byte{0}
-		timestamp = append(adr, timestamp...)
-		chk.Timestamp = binary.BigEndian.Uint32(timestamp)
-
 		if chunk, ok := chk.Conn.ChunkLists[chk.SteamID]; ok {
 			chk.MessageLength = chunk.MessageLength
 			chk.MessageTypeID = chunk.MessageTypeID
 			chk.MessageStreamID = chunk.MessageStreamID
 		}
-
 	}
-
 	// type 0 - 1 had MessageLength and MessageType
 	if chk.Format < 2 {
-
 		messagelength, err := chk.Conn.ReadFull(3)
 		messagelength = append([]byte{0}, messagelength...)
 		chk.MessageLength = binary.BigEndian.Uint32(messagelength)
-
 		chk.MessageTypeID, err = chk.Conn.ReadByte()
-
 		if err != nil {
 			return err
 		}
 	}
-
+	// type 0
 	if chk.Format < 1 {
-		steamid, err := chk.Conn.ReadFull(4)
-		chk.MessageStreamID = binary.LittleEndian.Uint32(steamid)
-		if err != nil {
+		if steamid, err := chk.Conn.ReadFull(4); err == nil {
+			chk.MessageStreamID = binary.LittleEndian.Uint32(steamid)
+		} else {
 			return err
 		}
 	}
-
 	//判断时间拓展字段是否存在-
 	if chk.Timestamp == 0xFFFFFF {
 		extendTimestamp, err := chk.Conn.ReadFull(4)
@@ -132,12 +131,81 @@ func (chk *Chunk) readMessageHeader() error {
 		}
 		chk.ExtendTimestamp = binary.BigEndian.Uint32(extendTimestamp)
 	}
-
+	chk.Payload = []byte{}
+	chk.Conn.ChunkLists[chk.SteamID] = *chk
 	return nil
 }
 
+// 读取源消息。
+func (chk *Chunk) originMessage() error {
+	var readed int
+	for {
+		//读基础头
+		if err := chk.readBasicHeader(); err != nil {
+			return err
+		}
+
+		//读消息头
+		if err := chk.readMessageHeader(); err != nil {
+			return err
+		}
+
+		//判断本次读取的消息长度。
+		length := int(chk.MessageLength) - readed
+		if length > chk.Conn.ReadChunkSize {
+			length = chk.Conn.ReadChunkSize
+		}
+
+		//读取消息。
+		if Payload, err := chk.Conn.ReadFull(length); err == nil {
+			chk.Payload = append(chk.Payload, Payload...)
+		} else {
+			return err
+		}
+
+		//读取结束，退出循环。
+		readed += length
+		if uint32(readed) >= chk.MessageLength {
+			break
+		}
+	}
+	return nil
+}
+
+//ReadMsg 读取消息。
+func (chk *Chunk) ReadMsg() error {
+	//ReadMsg 读取一个需要处理的消息。循环处理，如果是协议控制消息则继续读取。
+	err := chk.originMessage()
+	if err != nil {
+		return err
+	}
+	// 处理与提取Msg无关的控制协议。
+	switch int(chk.MessageTypeID) {
+	case 1:
+		chk.Conn.ReadChunkSize = int(binary.BigEndian.Uint32(chk.Payload))
+		log.Println("Rtmp SetChunkSize", chk.Conn.ReadChunkSize)
+		err = chk.ReadMsg()
+	case 2:
+		log.Println("Rtmp AbortMessage")
+		err = chk.ReadMsg()
+	case 3:
+		log.Println("Rtmp Acknowledgement")
+		err = chk.ReadMsg()
+	case 4:
+		log.Println("Rtmp SetBufferLength")
+		err = chk.ReadMsg()
+	case 5:
+		log.Println("Rtmp WindowAcknowledgementSize")
+		err = chk.ReadMsg()
+	case 6:
+		log.Println("Rtmp SetPeerBandwidth")
+		err = chk.ReadMsg()
+	}
+
+	return err
+}
+
 // 制作消息头
-//
 func (chk *Chunk) genMessageHeader() []byte {
 	if chk.Format > 2 || chk.Format < 0 {
 		return nil
@@ -171,84 +239,18 @@ func (chk *Chunk) genMessageHeader() []byte {
 	return headArr
 }
 
-// 读取源消息。
-func (chk *Chunk) originMessage() error {
-	var readed int
-	chk.Payload = []byte{}
-	for {
-		//读基础头
-		if err := chk.readBasicHeader(); err != nil {
-			return err
-		}
-		//读消息头
-		if err := chk.readMessageHeader(); err != nil {
-			return err
-		}
-		//判断本次读取的消息长度。
-		length := int(chk.MessageLength) - readed
-		if length > chk.Conn.ReadChunkSize {
-			length = chk.Conn.ReadChunkSize
-		}
-
-		//读取消息。
-		if Payload, err := chk.Conn.ReadFull(length); err == nil {
-			chk.Payload = append(chk.Payload, Payload...)
-		} else {
-			return err
-		}
-
-		//读取结束，退出循环。
-		readed += length
-		if uint32(readed) >= chk.MessageLength {
-			break
-		}
-	}
-
-	chk.Conn.ChunkLists[chk.SteamID] = *chk
-
-	return nil
-}
-
-//ReadMsg 读取消息。
-func (chk *Chunk) ReadMsg() error {
-	//ReadMsg 读取一个需要处理的消息。循环处理，如果是协议控制消息则继续读取。
-	err := chk.originMessage()
-	if err != nil {
-		return err
-	}
-
-	// 处理与提取Msg无关的控制协议。
-	switch int(chk.MessageTypeID) {
-	case 1:
-		chk.Conn.ReadChunkSize = int(binary.BigEndian.Uint32(chk.Payload))
-		log.Println("Rtmp SetChunkSize", chk.Conn.ReadChunkSize)
-		err = chk.ReadMsg()
-	case 2:
-		log.Println("Rtmp AbortMessage")
-		err = chk.ReadMsg()
-	case 3:
-		log.Println("Rtmp Acknowledgement")
-		err = chk.ReadMsg()
-	case 4:
-		log.Println("Rtmp SetBufferLength")
-		err = chk.ReadMsg()
-	case 5:
-		log.Println("Rtmp WindowAcknowledgementSize")
-		err = chk.ReadMsg()
-	case 6:
-		log.Println("Rtmp SetPeerBandwidth")
-		err = chk.ReadMsg()
-	}
-
-	return err
-}
-
 //SendChunk 发送消息。
 func (chk *Chunk) SendChunk() error {
 	if chk.MessageLength == 0 {
 		chk.MessageLength = uint32(len(chk.Payload))
 	}
-	chk.Format = 0
+
+	if _, ok := chk.Conn.ChunkLists[chk.SteamID]; ok {
+		chk.Format = 1
+	} else {
+		chk.Format = 0
+		chk.Conn.ChunkLists[chk.SteamID] = *chk
+	}
 
 	var mArr []byte
 	mArr = chk.genBasicHeader()

@@ -2,6 +2,7 @@ package rtmp
 
 import (
 	"encoding/binary"
+	"errors"
 	"log"
 
 	"github.com/pennfly/rtmp-go/amf"
@@ -40,16 +41,27 @@ func (m *Message) streamBegin() {
 	c.SendChunk()
 }
 
+func (m *Message) createSteam() {
+	//log.Println(m.Chunk.SteamID, m.Chunk.MessageTypeID, m.Chunk.MessageLength)
+	item := amf.Decode(m.Chunk.Payload)
+	switch item[0] {
+	case "connect":
+		m.respConnect(item[2])
+	case "createStream":
+		m.respCreateSteam(item[1])
+	case "publish":
+		m.respPublish(item[3])
+	case "play":
+		m.respPlay(item[3]) // onStatus-play-reset
+	default:
+		log.Println("Rtmp Message not resp:->", item)
+	}
+}
+
 func (m *Message) respPublish(steam amf.Value) {
 
 	m.Conn.Stream = steam.(string)
-	pusher := make(chan byte)
-	log.Println("live name := ", m.Conn.App+"/"+m.Conn.Stream)
-	m.Server.WorkPool[m.Conn.App+"/"+m.Conn.Stream] = &WorkPool{
-		Pusher:   pusher,
-		Metadata: Chunk{},
-		Player:   []chan Chunk{},
-	}
+	m.Server.addPool(m.Conn.App, m.Conn.Stream)
 
 	res := make(map[string]amf.Value)
 	res["level"] = "status"
@@ -64,14 +76,17 @@ func (m *Message) respPublish(steam amf.Value) {
 		Conn:          m.Conn,
 	}
 	c.SendChunk()
+
+	m.Conn.IsPusher = true
 }
 
-func (m *Message) respPlay(steam amf.Value) {
+func (m *Message) respPlay(steam amf.Value) error {
 	m.Conn.Stream = steam.(string)
-	name := m.Conn.App + "/" + m.Conn.Stream
-	if _, ok := m.Server.WorkPool[name]; !ok {
+
+	if _, ok := m.Server.WorkPool[m.Conn.App][m.Conn.Stream]; !ok {
+		// m.respDelete
 		m.Conn.Close()
-		return
+		return errors.New("rtmp live dont set" + m.Conn.App + m.Conn.Stream)
 	}
 
 	m.streamBegin()
@@ -90,16 +105,21 @@ func (m *Message) respPlay(steam amf.Value) {
 	}
 	c.SendChunk()
 
-	defer func() {
-		metadata := m.Server.WorkPool[name].Metadata
+	go func() {
+		pool := m.Server.WorkPool[m.Conn.App][m.Conn.Stream]
+
+		metadata := pool.Metadata
 		metadata.Conn = m.Conn
+		metadata.Payload = metadata.Payload[16:]
 		metadata.SendChunk()
 
-		player := make(chan Chunk)
-		m.Server.WorkPool[name].Player = append(m.Server.WorkPool[name].Player, player)
+		play := make(chan Chunk)
+		playKey := m.Conn.remoteAddr
+		pool.Player[playKey] = play
+
 		for {
-			x := <-player
-			//log.Println(x.Format, x.SteamID, x.Timestamp, x.MessageLength, x.MessageTypeID, x.MessageStreamID)
+
+			x := <-play
 			x.Conn = m.Conn
 			if err := x.SendChunk(); err != nil {
 				log.Println(err)
@@ -107,7 +127,7 @@ func (m *Message) respPlay(steam amf.Value) {
 			}
 		}
 	}()
-
+	return nil
 }
 
 func (m *Message) respCreateSteam(nmb amf.Value) {
@@ -154,42 +174,19 @@ func (m *Message) respConnect(amfObj amf.Value) {
 	c.SendChunk()
 }
 
-func (m *Message) createSteam() {
-	item := amf.Decode(m.Chunk.Payload)
-	switch item[0] {
-	case "connect":
-		m.respConnect(item[2])
-	case "createStream":
-		m.respCreateSteam(item[1])
-	case "publish":
-		m.respPublish(item[3])
-	case "play":
-		m.respPlay(item[3]) // onStatus-play-reset
-	default:
-		log.Println("Rtmp Message not resp:->", item[0])
-	}
-}
-
-func (m *Message) sendAvPack() {
-	//
-	play := &m.Server.WorkPool[m.Conn.App+"/"+m.Conn.Stream].Player
-	for _, v := range *play {
-		v <- *m.Chunk
-	}
-}
-
 //分发消息。
-func (m *Message) assort() {
+func (m *Message) doAction() error {
 	switch m.Chunk.MessageTypeID {
 	case 20, 17:
 		m.createSteam()
 	case 18, 15:
-		m.Server.WorkPool[m.Conn.App+"/"+m.Conn.Stream].Metadata = *m.Chunk
+		m.Server.WorkPool[m.Conn.App][m.Conn.Stream].Metadata = *m.Chunk
 	case 9, 8:
 		m.sendAvPack()
 	default:
-		log.Println("Rtmp Message had err typeid ->:", m.Chunk.MessageTypeID)
+		return errors.New("rtmp message had err typeid " + string(m.Chunk.MessageTypeID))
 	}
+	return nil
 }
 
 func newMessage(chk *Chunk) error {
@@ -198,6 +195,13 @@ func newMessage(chk *Chunk) error {
 		Conn:   chk.Conn,
 		Server: chk.Conn.Server,
 	}
-	msg.assort()
-	return nil
+	err := msg.doAction()
+	return err
+}
+
+func (m *Message) sendAvPack() {
+	play := &m.Server.WorkPool[m.Conn.App][m.Conn.Stream].Player
+	for _, v := range *play {
+		v <- *m.Chunk
+	}
 }

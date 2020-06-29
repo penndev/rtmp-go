@@ -2,8 +2,8 @@ package rtmp
 
 import (
 	"bufio"
-	"fmt"
 	"io"
+	"log"
 	"net"
 )
 
@@ -31,6 +31,7 @@ type Conn struct {
 	ChunkLists     map[uint32]Chunk
 	App            string
 	Stream         string
+	IsPusher       bool
 }
 
 func (c *Conn) handShake() error {
@@ -53,7 +54,6 @@ func (c *Conn) ReadFull(length int) ([]byte, error) {
 
 //ReadByte 读取单个字节
 func (c *Conn) ReadByte() (byte, error) {
-	// log.Println(c.rwByteSize.read)
 	c.rwByteSize.read++
 	return c.r.ReadByte()
 }
@@ -66,14 +66,18 @@ func (c *Conn) Write(buf []byte) (int, error) {
 	return l, err
 }
 
+// 开始处理 流
 func (c *Conn) stream() error {
 	chk := newChunk(c)
-	//msg := newMsg()
 	for {
+		//read chunk message
 		if err := chk.ReadMsg(); err != nil {
 			return err
 		}
-		newMessage(chk)
+		//ctrl message
+		if err := newMessage(chk); err != nil {
+			return err
+		}
 	}
 }
 
@@ -83,11 +87,13 @@ func (c *Conn) serve() {
 	defer c.Close()
 	//Handshake
 	if err := c.handShake(); err != nil {
-		fmt.Println("c.handShake err ->:", err)
+		log.Println("c.handShake err ->:", err)
 	}
 
+	//NetConnection
+	//NetStream
 	if err := c.stream(); err != nil {
-		fmt.Println("c.stream err ->:", err)
+		log.Println("c.stream err ->:", err)
 	}
 }
 
@@ -104,8 +110,9 @@ func newConn(srv *Server, rw net.Conn) *Conn {
 		remoteAddr: rw.RemoteAddr().String(),
 		rwByteSize: &rwByteSize{},
 
-		SteamID:    3,
+		SteamID:    4,
 		ChunkLists: make(map[uint32]Chunk),
+		IsPusher:   false,
 	}
 	return conn
 }
