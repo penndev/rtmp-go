@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"log"
 	"math"
+	"reflect"
 )
 
 //
@@ -94,7 +95,7 @@ func ReadObject(bytes []byte) map[string]Value {
 func ReadEcmaObject(bytes []byte) (map[string]Value, int) {
 	obj := make(map[string]Value)
 	lenght := int(binary.BigEndian.Uint32(bytes[0:4]))
-	leng := 4
+	leng := 5 // 4byte len 1byte type
 	bytes = bytes[4:]
 
 	for lenght > 0 {
@@ -132,7 +133,7 @@ func ReadEcmaObject(bytes []byte) (map[string]Value, int) {
 		lenght--
 		bytes = bytes[end:]
 	}
-	return obj, leng
+	return obj, leng + 3 // 009
 }
 
 // ReadNull 读取空类型
@@ -141,11 +142,11 @@ func ReadNull() bool {
 }
 
 // WriteNumber 写入数据
-func WriteNumber(s int) []byte {
+func WriteNumber(s float64) []byte {
 	var val []byte
 	val = append(val, 0x00)
 
-	bits := math.Float64bits(float64(s))
+	bits := math.Float64bits(s)
 	bytes := make([]byte, 8)
 	binary.BigEndian.PutUint64(bytes, bits)
 	val = append(val, bytes...)
@@ -163,9 +164,17 @@ func WriteString(s string) []byte {
 	return val
 }
 
+// WriteBoolean 读取amf布尔值 1个字节
+func WriteBoolean(b bool) []byte {
+	if b {
+		return []byte{1, 1}
+	} else {
+		return []byte{1, 0}
+	}
+}
+
 // WriteObject 写入对象
 func WriteObject(objs map[string]Value) []byte {
-
 	var res []byte
 	res = append(res, 0x03)
 	for i, v := range objs {
@@ -174,9 +183,13 @@ func WriteObject(objs map[string]Value) []byte {
 		case string:
 			res = append(res, WriteString(iType)...)
 		case int:
+			res = append(res, WriteNumber(float64(iType))...)
+		case float64:
 			res = append(res, WriteNumber(iType)...)
+		case bool:
+			res = append(res, WriteBoolean(iType)...)
 		default:
-			log.Println("rtmp amf- WriteObject 遇到未处理的数据类型:", iType)
+			log.Println("rtmp amf-WriteObject err:", iType, reflect.TypeOf(iType))
 		}
 	}
 	return append(res, 0, 0, TypeObjectEnd)

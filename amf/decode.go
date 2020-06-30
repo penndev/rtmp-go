@@ -8,7 +8,6 @@ import (
 // Decode 对数据进行解码
 func Decode(b []byte) []Value {
 	var r []Value
-	// log.Println(b)
 	for len(b) > 0 {
 		var val Value
 		switch b[0] {

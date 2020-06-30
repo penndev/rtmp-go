@@ -9,8 +9,10 @@ func Encode(val []Value) []byte {
 		switch iType := v.(type) {
 		case string:
 			res = append(res, WriteString(iType)...)
-		case int:
+		case float64:
 			res = append(res, WriteNumber(iType)...)
+		case int:
+			res = append(res, WriteNumber(float64(iType))...)
 		case map[string]Value:
 			res = append(res, WriteObject(iType)...)
 		case nil:

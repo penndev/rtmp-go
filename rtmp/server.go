@@ -7,7 +7,7 @@ import (
 
 //WorkPool rtmp 消息池
 type WorkPool struct {
-	Metadata Chunk
+	Metadata []byte
 	Player   map[string]chan Chunk
 }
 
@@ -42,14 +42,14 @@ func (srv *Server) Serve() error {
 func (srv *Server) addPool(app string, stream string) {
 	room := make(map[string]*WorkPool)
 	room[stream] = &WorkPool{
-		Metadata: Chunk{},
+		Metadata: []byte{},
 		Player:   map[string]chan Chunk{},
 	}
-
-	// name := make(map[string]map[string]*WorkPool)
-	// name[app] = room
-
 	srv.WorkPool[app] = room
+}
+
+func (srv *Server) addMetadata(app string, stream string, payload []byte) {
+	srv.WorkPool[app][stream].Metadata = payload
 }
 
 // Serve listens on the TCP network address addr and timeout

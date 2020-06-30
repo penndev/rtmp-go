@@ -239,7 +239,7 @@ func (chk *Chunk) genMessageHeader() []byte {
 	return headArr
 }
 
-//SendChunk 发送消息。
+//SendChunk 回复消息。
 func (chk *Chunk) SendChunk() error {
 	if chk.MessageLength == 0 {
 		chk.MessageLength = uint32(len(chk.Payload))
