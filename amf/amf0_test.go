@@ -50,6 +50,6 @@ func TestWriteString(t *testing.T) {
 
 func TestWriteNumber(t *testing.T) {
 	str := 319
-	r := amf.WriteNumber(str)
+	r := amf.WriteNumber(float64(str))
 	log.Println(r)
 }

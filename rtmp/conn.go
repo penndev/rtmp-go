@@ -24,6 +24,7 @@ type Conn struct {
 	w          *bufio.Writer
 	rwByteSize *rwByteSize
 	remoteAddr string
+	closed     bool
 
 	ReadChunkSize  int
 	WriteChunkSize int
@@ -41,6 +42,7 @@ func (c *Conn) handShake() error {
 
 // Close this connection.
 func (c *Conn) Close() {
+	c.closed = true
 	c.rwc.Close()
 }
 
@@ -78,6 +80,10 @@ func (c *Conn) stream() error {
 		if err := newMessage(chk); err != nil {
 			return err
 		}
+		//exit the client
+		if c.closed {
+			return nil
+		}
 	}
 }
 
@@ -89,7 +95,6 @@ func (c *Conn) serve() {
 	if err := c.handShake(); err != nil {
 		log.Println("c.handShake err ->:", err)
 	}
-
 	//NetConnection
 	//NetStream
 	if err := c.stream(); err != nil {
@@ -109,6 +114,7 @@ func newConn(srv *Server, rw net.Conn) *Conn {
 		w:          bufio.NewWriter(rw),
 		remoteAddr: rw.RemoteAddr().String(),
 		rwByteSize: &rwByteSize{},
+		closed:     false,
 
 		SteamID:    4,
 		ChunkLists: make(map[uint32]Chunk),

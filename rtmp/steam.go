@@ -103,27 +103,38 @@ func (m *Message) respConnect(amfObj amf.Value) {
 	c.SendChunk()
 }
 
-func (m *Message) createSteam() {
-	//log.Println(m.Chunk.SteamID, m.Chunk.MessageTypeID, m.Chunk.MessageLength)
-	item := amf.Decode(m.Chunk.Payload)
-	switch item[0] {
-	case "connect":
-		m.respConnect(item[2])
-	case "createStream":
-		m.respCreateSteam(item[1])
-	case "publish":
-		m.respPublish(item[3])
-	case "play":
-		m.respPlay(item[3]) // onStatus-play-reset
-	default:
-		log.Println("Rtmp Message not resp:->", item)
+func (m *Message) deleteStream() {
+	if !m.Conn.IsPusher {
+		if play, ok := m.Server.WorkPool[m.Conn.App][m.Conn.Stream].Player[m.Conn.remoteAddr]; ok {
+			delete(m.Server.WorkPool[m.Conn.App][m.Conn.Stream].Player, m.Conn.remoteAddr)
+			close(play)
+		}
 	}
+
+	m.Conn.Close()
 }
 
 func (m *Message) setMetadata() {
 	item := amf.Decode(m.Chunk.Payload)
-	resp := []amf.Value{item[1], item[2]}
-	m.Server.addMetadata(m.Conn.App, m.Conn.Stream, amf.Encode(resp))
+	meta := item[2]
+	resp := []amf.Value{"onMetaData", meta}
+
+	metaItem, ok := meta.(map[string]amf.Value)
+	if !ok {
+		m.Conn.Close()
+	}
+
+	wp := m.Server.WorkPool[m.Conn.App][m.Conn.Stream]
+	wp.Metadata = amf.Encode(resp)
+	switch vid := metaItem["videocodecid"].(type) {
+	case string:
+		if vid == "avc1" {
+			wp.videocodecid = 7
+		}
+	case float64:
+		wp.videocodecid = int(vid)
+	}
+
 }
 
 // Playing 加入播放队列
@@ -140,6 +151,22 @@ func (m *Message) Playing() {
 	}
 	c.SendChunk()
 
+	if pool.videocodecid == 7 {
+		v := Chunk{
+			MessageTypeID: 9,
+			SteamID:       4,
+			Payload:       pool.VideoCode,
+			Conn:          m.Conn,
+		}
+		v.SendChunk()
+		a := Chunk{
+			MessageTypeID: 8,
+			SteamID:       4,
+			Payload:       pool.AudioCode,
+			Conn:          m.Conn,
+		}
+		a.SendChunk()
+	}
 	//
 	start := false
 	for {

@@ -7,8 +7,11 @@ import (
 
 //WorkPool rtmp 消息池
 type WorkPool struct {
-	Metadata []byte
-	Player   map[string]chan Chunk
+	Metadata     []byte
+	VideoCode    []byte
+	AudioCode    []byte
+	videocodecid int
+	Player       map[string]chan Chunk
 }
 
 // A Server defines parameters for running a RTMP server.
@@ -46,10 +49,6 @@ func (srv *Server) addPool(app string, stream string) {
 		Player:   map[string]chan Chunk{},
 	}
 	srv.WorkPool[app] = room
-}
-
-func (srv *Server) addMetadata(app string, stream string, payload []byte) {
-	srv.WorkPool[app][stream].Metadata = payload
 }
 
 // Serve listens on the TCP network address addr and timeout

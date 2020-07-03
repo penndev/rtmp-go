@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
-	"encoding/binary"
 	"errors"
 	"log"
 	"net"
@@ -57,16 +56,16 @@ func ServeHandShake(c net.Conn) error {
 		return errors.New("rtmp version is not support")
 	}
 
-	zeroFull := binary.BigEndian.Uint32(buf[5:9]) // hand shake type
-	if zeroFull == 0 {                            // 复杂握手
-		// <-S0+S1+S2
-		S2 := buf[1:1537]
-		c.Write(buf)
-		c.Write(S2)
-	} else { //简单握手。
-		c.Write(genS0S1S2(buf))
-		log.Println("debug --001 复杂握手flash 会握手失败，待完善！！！")
-	}
+	// zeroFull := binary.BigEndian.Uint32(buf[5:9]) // hand shake type
+	// if zeroFull == 0 {                            // 复杂握手
+	// <-S0+S1+S2
+	S2 := buf[1:1537]
+	c.Write(buf)
+	c.Write(S2)
+	// } else { //简单握手。
+	// 	c.Write(genS0S1S2(buf))
+	// 	log.Println("debug --001 复杂握手flash 会握手失败，待完善！！！")
+	// }
 
 	// C2->
 	_, err = c.Read(make([]byte, 1536))
