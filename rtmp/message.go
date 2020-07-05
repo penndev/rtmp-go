@@ -3,6 +3,7 @@ package rtmp
 import (
 	"encoding/binary"
 	"errors"
+	"log"
 
 	"github.com/pennfly/rtmp-go/amf"
 )
@@ -60,7 +61,6 @@ func (m *Message) createSteam() error {
 	switch item[0] {
 	case "connect":
 		m.respConnect(item[2])
-	case "releaseStream":
 
 	case "createStream":
 		m.respCreateSteam(item[1])
@@ -68,13 +68,13 @@ func (m *Message) createSteam() error {
 		m.respPublish(item[3])
 	case "play":
 		m.respPlay(item[3]) // onStatus-play-reset
-	case "FCPublish":
-
 	case "deleteStream":
 		m.deleteStream()
-
+	case "FCPublish":
+	case "getStreamLength":
+	case "releaseStream":
 	default:
-		return errors.New("message createsteam unprocessed: " + item[0].(string))
+		log.Println("message createsteam unprocessed: ", item[0].(string))
 	}
 	return nil
 }
