@@ -45,10 +45,10 @@ func (m *Message) respPlay(steam amf.Value) error {
 	res["code"] = "NetStream.Play.Start"
 	res["description"] = "Start playing"
 	resp := []amf.Value{"onStatus", 0, nil, res}
-
+	m.Conn.SteamID = m.Chunk.SteamID
 	c := Chunk{
 		MessageTypeID: 20,
-		SteamID:       4,
+		SteamID:       m.Chunk.SteamID,
 		Payload:       amf.Encode(resp),
 		Conn:          m.Conn,
 	}
@@ -67,7 +67,7 @@ func (m *Message) respCreateSteam(nmb amf.Value) {
 	repByte := amf.Encode([]amf.Value{"_result", int(t), nil, int(t)})
 	c := Chunk{
 		MessageTypeID: 20,
-		SteamID:       3,
+		SteamID:       m.Chunk.SteamID,
 		Payload:       repByte,
 		Conn:          m.Conn,
 	}
@@ -90,13 +90,13 @@ func (m *Message) respConnect(amfObj amf.Value) {
 	repStatus := make(map[string]amf.Value)
 	repStatus["level"] = "status"
 	repStatus["code"] = "NetConnection.Connect.Success"
-	repStatus["description"] = "Connection succeeded"
-	repStatus["objectEncoding"] = 0
+	repStatus["description"] = "Connection succeeded."
+	repStatus["objectEncoding"] = 3
 	// _error or _result
 	repSour := append(arrSour, "_result", 1, repVer, repStatus)
 	c := Chunk{
 		MessageTypeID: 20,
-		SteamID:       m.Conn.SteamID,
+		SteamID:       m.Chunk.SteamID,
 		Payload:       amf.Encode(repSour),
 		Conn:          m.Conn,
 	}

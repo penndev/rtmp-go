@@ -30,6 +30,7 @@ type Conn struct {
 	WriteChunkSize int
 	SteamID        uint32
 	ChunkLists     map[uint32]Chunk
+	SendChunkLists map[uint32]Chunk
 	App            string
 	Stream         string
 	IsPusher       bool
@@ -116,9 +117,10 @@ func newConn(srv *Server, rw net.Conn) *Conn {
 		rwByteSize: &rwByteSize{},
 		closed:     false,
 
-		SteamID:    4,
-		ChunkLists: make(map[uint32]Chunk),
-		IsPusher:   false,
+		SteamID:        4,
+		ChunkLists:     make(map[uint32]Chunk),
+		SendChunkLists: make(map[uint32]Chunk),
+		IsPusher:       false,
 	}
 	return conn
 }

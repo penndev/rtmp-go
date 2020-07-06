@@ -245,11 +245,11 @@ func (chk *Chunk) SendChunk() error {
 		chk.MessageLength = uint32(len(chk.Payload))
 	}
 
-	if _, ok := chk.Conn.ChunkLists[chk.SteamID]; ok {
+	if _, ok := chk.Conn.SendChunkLists[chk.SteamID]; ok {
 		chk.Format = 1
 	} else {
 		chk.Format = 0
-		chk.Conn.ChunkLists[chk.SteamID] = *chk
+		chk.Conn.SendChunkLists[chk.SteamID] = *chk
 	}
 
 	var mArr []byte

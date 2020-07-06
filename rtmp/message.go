@@ -57,7 +57,13 @@ func (m *Message) sendAvPack() {
 }
 
 func (m *Message) createSteam() error {
-	item := amf.Decode(m.Chunk.Payload)
+	var item []amf.Value
+	if m.Chunk.MessageTypeID == 17 {
+		item = amf.Decode3(m.Chunk.Payload)
+	} else {
+		item = amf.Decode(m.Chunk.Payload)
+	}
+
 	switch item[0] {
 	case "connect":
 		m.respConnect(item[2])
