@@ -27,6 +27,7 @@ var ServerFullKey = []byte{
 	0x93, 0xB8, 0xE6, 0x36, 0xCF, 0xEB, 0x31, 0xAE,
 }
 
+//ClientFullKey 0:30
 var ClientFullKey = []byte{
 	'G', 'e', 'n', 'u', 'i', 'n', 'e', ' ', 'A', 'd', 'o', 'b', 'e', ' ',
 	'F', 'l', 'a', 's', 'h', ' ', 'P', 'l', 'a', 'y', 'e', 'r', ' ',
