@@ -5,7 +5,7 @@
 
 安装启动：
     
-    git clone git@github.com:Penndev/rtmp-go.git
+    git clone https://github.com/Penndev/rtmp-go.git
     cd rtmp-go
     go run .
 
