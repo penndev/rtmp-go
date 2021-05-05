@@ -2,9 +2,8 @@ package amf_test
 
 import (
 	"log"
+	"rtmp-go/amf"
 	"testing"
-
-	"github.com/pennfly/rtmp-go/amf"
 )
 
 func TestReadNumber(t *testing.T) {

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"log"
 
-	"github.com/pennfly/rtmp-go/amf"
+	"rtmp-go/amf"
 )
 
 // Message 详细消息处理。

@@ -4,7 +4,7 @@ import (
 	"errors"
 	"log"
 
-	"github.com/pennfly/rtmp-go/amf"
+	"rtmp-go/amf"
 )
 
 func (m *Message) respPublish(steam amf.Value) {
