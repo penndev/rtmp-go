@@ -3,6 +3,10 @@
 * 本项目目前并未进行任何优化与测试，请勿用于学习之外的其他目的谢谢
 ## 简单启动测试
 
+动图演示：
+
+![](./docs/obs+flv.gif)
+
 安装启动：
     
     git clone https://github.com/Penndev/rtmp-go.git
