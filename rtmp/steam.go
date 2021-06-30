@@ -3,7 +3,6 @@ package rtmp
 import (
 	"errors"
 	"log"
-
 	"rtmp-go/amf"
 )
 
