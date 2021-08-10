@@ -2,6 +2,7 @@ package rtmp
 
 import (
 	"bufio"
+	"fmt"
 	"net"
 )
 
@@ -55,6 +56,11 @@ type Conn struct {
 // 	}
 // }
 
+func (c *Conn) handShake() error {
+	err := ServeHandShake(*c.rwc)
+	return err
+}
+
 // 关闭rtmp连接，做一些清理。
 func (c *Conn) Close() {
 	(*c.rwc).Close()
@@ -63,4 +69,9 @@ func (c *Conn) Close() {
 //处理Rtmp消息协议
 func (c *Conn) connect() {
 	defer c.Close()
+	//握手
+	if err := c.handShake(); err != nil {
+		fmt.Println(err)
+	}
+	//获取 app 与 steam 消息
 }
