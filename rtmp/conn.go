@@ -6,12 +6,6 @@ import (
 	"net"
 )
 
-// conn read size and write size
-type rwByteSize struct {
-	read  int
-	write int
-}
-
 //依据rtmp对tcp进行封装
 type Conn struct {
 	// Serve 数据结构
@@ -37,24 +31,14 @@ type Conn struct {
 	IsPusher bool
 }
 
-// // 开始处理 流
-// func (c *Conn) stream() error {
-// 	chk := newChunk(c)
-// 	for {
-// 		//read chunk message
-// 		if err := chk.ReadMsg(); err != nil {
-// 			return err
-// 		}
-// 		//ctrl message
-// 		if err := newMessage(chk); err != nil {
-// 			return err
-// 		}
-// 		//exit the client
-// 		if c.closed {
-// 			return nil
-// 		}
-// 	}
-// }
+func (c *Conn) ReadChunk() (*Chunk, error) {
+	chunk := &Chunk{
+		r:        c.r,
+		w:        c.w,
+		rChkList: make(map[uint32]*FmtHeader),
+	}
+	return chunk, nil
+}
 
 func (c *Conn) handShake() error {
 	err := ServeHandShake(*c.rwc)
@@ -74,4 +58,10 @@ func (c *Conn) connect() {
 		fmt.Println(err)
 	}
 	//获取 app 与 steam 消息
+	ck, err := c.ReadChunk()
+	if err != nil {
+		fmt.Println(err)
+	}
+	ck.reqMsg()
+	fmt.Println(ck)
 }
