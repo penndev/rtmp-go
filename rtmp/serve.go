@@ -1,7 +1,6 @@
 package rtmp
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"net"
@@ -15,7 +14,7 @@ type Serve struct {
 }
 
 //启动Tcp监听
-func (srv *Serve) Server() error {
+func (srv *Serve) Listen() error {
 	var lc = net.ListenConfig{
 		KeepAlive: srv.Timeout,
 	}
@@ -31,28 +30,26 @@ func (srv *Serve) Server() error {
 			conn.Close()
 			continue
 		}
-		//
-		client := &Conn{
-			serve: srv,
-			rwc:   &conn,
-			r:     bufio.NewReader(conn),
-			w:     bufio.NewWriter(conn),
-
-			ReadChunkSize:  srv.ChunkSize,
-			WriteChunkSize: 4096,
-
-			IsPusher: false,
+		var run = func() {
+			conn := &Conn{
+				serve:    srv,
+				rwc:      &conn,
+				IsPusher: false,
+			}
+			//阻塞函数
+			conn.Connect()
 		}
-		go client.connect()
+		go run()
+		//
+		// 启动媒体处理进程。
 	}
 }
 
 //使用默认参数 配置Rtmp
 func Server() error {
 	serve := &Serve{
-		Addr:      ":19350",
-		Timeout:   10 * time.Second,
-		ChunkSize: 128,
+		Addr:    ":1935",
+		Timeout: 10 * time.Second,
 	}
-	return serve.Server()
+	return serve.Listen()
 }

@@ -3,16 +3,16 @@ package rtmp
 import (
 	"bufio"
 	"encoding/binary"
+	"errors"
+	"fmt"
 	"io"
 )
 
-type FmtHeader struct {
-	Timestamp       uint32 // 3 byte
-	MessageLength   uint32 // 3 byte
-	MessageTypeID   byte   // 1 byte
-	MessageStreamID uint32 // 4 byte
-	ExtendTimestamp uint32 // 4 byte
-}
+//默认ChunkSize
+var DefaultChunkSize = 128
+
+//写如的ChunkSize
+var SetChunkSize = 4096
 
 // Chunk 处理rtmp中的流数据
 type Chunk struct {
@@ -22,25 +22,38 @@ type Chunk struct {
 	// Value 1
 	// Value 2
 	// Value 3 消息段，主要用来传输chunk段
+
 	fmt byte //2 bit
 	// The protocol supports up to 65597 streams with IDs 3-65599.
 	// Chunk Basic  Header field may be 1, 2, or 3 bytes, depending on the chunk stream ID.
 	// Value 3-63 no read more
 	// Value 0 indicates the 2 byte ；  64-319 (the second byte + 64)
 	// Value 1 indicates  the 3 byte；  64-65599 ((the third byte)*256 + the second byte + 64)
-	// Value 2 保留
+	// Value 2 保留用作控制协议。
 	csid uint32 //6 bit
-	//
-	Payload []byte
-	//
+
+	// ChunkStreamID
+	// 不同的 ChunkStreamID 会有不同的 MsgHeader
+	// 因为多路复用，可能会随时恢复之前读取的状态。
+	rChkList map[uint32]*MsgHeader
+
+	// ChunkStreamID
+	// 不同的 ChunkStreamID 会有不同的 MsgHeader
+	// 因为多路复用，可能会随时恢复之前读取的状态。
+	wChkList map[uint32]*MsgHeader
+
+	// 读写IO
 	r *bufio.Reader
 	w *bufio.Writer
+
 	// read size 从客户端共读取了多少字节的数据（不包括握手）
 	rSize uint
-	//rtmp 协议 chunk 限制大小
+
+	//rtmp 协议读取 chunk 限制大小
 	rChkSize uint32
-	// 消息头暂存信息-多路复用使用
-	rChkList map[uint32]*FmtHeader
+
+	//rtmp 协议发送 chunk 限制大小
+	wChkSize uint32
 }
 
 //从bufio读取数据并进行字节统计
@@ -49,6 +62,14 @@ func (chk *Chunk) Read(l int) ([]byte, error) {
 	l, err := io.ReadFull(chk.r, buf)
 	chk.rSize += uint(l)
 	return buf, err
+}
+
+func (chk *Chunk) Write(buf []byte) error {
+	_, err := chk.w.Write(buf)
+
+	// c.rwByteSize.write += l
+	//l
+	return err
 }
 
 //读取Rtmp基础消息头
@@ -70,9 +91,29 @@ func (chk *Chunk) reqBasicHeader() error {
 		if err != nil {
 			return err
 		}
-		chk.csid = uint32(64 + csid[0] + csid[1]>>8)
+		chk.csid = uint32(64 + csid[0] + csid[1]*255)
 	}
 	return nil
+}
+
+// 制作基础消息头
+func (chk *Chunk) rspBasicHeader(fmt byte, csid uint32) []byte {
+	load := make([]byte, 1)
+	if csid < 64 {
+		load[0] = byte(csid + uint32(fmt<<6))
+	} else if csid < 320 {
+		load[0] = byte(0 + (fmt << 6))
+		load = append(load, byte(csid-64))
+	} else if csid < 65510 {
+		load[0] = byte(1 + (fmt << 6))
+		Second := csid - 64
+		if Second > 255 {
+			load = append(load, byte(Second%256), byte(Second/256))
+		} else {
+			load = append(load, byte(Second), 0)
+		}
+	}
+	return load
 }
 
 // 根据 fmt 来处理获取message Header
@@ -82,8 +123,8 @@ func (chk *Chunk) reqMsgHeader() error {
 		return nil
 	}
 
-	if _, ok := chk.rChkList[chk.csid]; ok == false {
-		chk.rChkList[chk.csid] = &FmtHeader{}
+	if _, ok := chk.rChkList[chk.csid]; !ok {
+		chk.rChkList[chk.csid] = &MsgHeader{}
 	}
 
 	//fmt type=[0 1 2]  have Timestamp
@@ -135,15 +176,52 @@ func (chk *Chunk) reqMsgHeader() error {
 	return nil
 }
 
-// 读取一条消息。并返回
-func (chk *Chunk) reqMsg() error {
+// 制作消息头
+func (chk *Chunk) rspMsgHeader(fmt byte, csid uint32) []byte {
+	if fmt > 2 {
+		return nil
+	}
+	var headArr []byte
+	// Type 0 - 1 - 2 had Timestamp
+	if fmt < 3 {
+		readTime := make([]byte, 4)
+		binary.BigEndian.PutUint32(readTime, chk.wChkList[csid].Timestamp)
+		headArr = readTime[1:]
+	}
+	// type 0 - 1 had MessageLength and MessageType
+	if fmt < 2 {
+		readLen := make([]byte, 4)
+		binary.BigEndian.PutUint32(readLen, chk.wChkList[csid].MessageLength)
+		headArr = append(headArr, readLen[1:]...)
+		headArr = append(headArr, chk.wChkList[csid].MessageTypeID)
+	}
+	// type 0 had steam id
+	if fmt < 1 {
+		readSteamid := make([]byte, 4)
+		binary.BigEndian.PutUint32(readSteamid, chk.wChkList[csid].MessageStreamID)
+		headArr = append(headArr, readSteamid...)
+	}
+
+	if chk.wChkList[csid].Timestamp == 0xFFFFFF {
+		readExtedtime := make([]byte, 4)
+		binary.BigEndian.PutUint32(readExtedtime, chk.wChkList[csid].ExtendTimestamp)
+		headArr = append(headArr, readExtedtime...)
+	}
+	return headArr
+}
+
+// 读取一条 Message
+// 一条消息可能是多条chunk消息
+// 返回一条原始的 Message
+func (chk *Chunk) reqMsg() ([]byte, error) {
 	readedLen := uint32(0)
+	payload := []byte{}
 	for {
 		if err := chk.reqBasicHeader(); err != nil {
-			return err
+			return nil, err
 		}
 		if err := chk.reqMsgHeader(); err != nil {
-			return err
+			return nil, err
 		}
 		//处理剩余未读字节数
 		remaining := chk.rChkList[chk.csid].MessageLength - readedLen
@@ -151,38 +229,96 @@ func (chk *Chunk) reqMsg() error {
 			remaining = chk.rChkSize
 		}
 		//\本次读取多少数据。
-		Payload, err := chk.Read(int(remaining))
+		load, err := chk.Read(int(remaining))
 		if err != nil {
-			return err
+			return nil, err
 		}
 		//叠加内容体
-		chk.Payload = append(chk.Payload, Payload...)
+		payload = append(payload, load...)
 		readedLen += remaining
 		//读取数据够数了。break =，panic >
-		if readedLen >= chk.rChkSize {
+		if readedLen >= chk.rChkList[chk.csid].MessageLength {
 			break
 		}
 	}
-	return nil
+	return payload, nil
 }
 
-// case 1:
-// 	chk.Conn.ReadChunkSize = int(binary.BigEndian.Uint32(chk.Payload))
-// 	log.Println("Rtmp SetChunkSize", chk.Conn.ReadChunkSize)
-// 	err = chk.ReadMsg()
-// case 2:
-// 	log.Println("Rtmp AbortMessage")
-// 	err = chk.ReadMsg()
-// case 3:
-// 	log.Println("Rtmp Acknowledgement")
-// 	err = chk.ReadMsg()
-// case 4:
-// 	log.Println("Rtmp SetBufferLength")
-// 	err = chk.ReadMsg()
-// case 5:
-// 	log.Println("Rtmp WindowAcknowledgementSize")
-// 	err = chk.ReadMsg()
-// case 6:
-// 	log.Println("Rtmp SetPeerBandwidth")
-// 	err = chk.ReadMsg()
-// }
+// 返回消息体
+// 对底层控制协议进行处理不直接返回。
+// 直接返回消息体
+func (chk *Chunk) readMsg() ([]byte, error) {
+	//读取原始数据
+	payload, err := chk.reqMsg()
+	if err != nil {
+		return nil, err
+	}
+	// 协议控制消息。
+	switch int(chk.rChkList[chk.csid].MessageTypeID) {
+	case 1:
+		//Set Chunk Size (1) //设置chunk大小
+		chk.rChkSize = binary.BigEndian.Uint32(payload)
+		fmt.Println("Set Chunk Size -", chk.rChkSize)
+	case 2:
+		//Abort Message (2) //中止消息。
+	case 3:
+		//  Acknowledgement (3) // 收到字节数对照
+	case 5:
+		// Window Acknowledgement Size (5) // 发送数据对照
+	case 6:
+		//  Set Peer Bandwidth (6) //限制传送速率
+	default:
+		return payload, nil
+
+	}
+	return chk.readMsg()
+}
+
+func (chk *Chunk) sendMsg(MessageTypeID byte, csid uint32, Payload []byte) error {
+	if csid < 2 {
+		return errors.New("csid cant < 2, 0 and 1 cant used")
+	}
+
+	writefmt := byte(1)
+	if _, ok := chk.wChkList[csid]; !ok {
+		chk.wChkList[csid] = &MsgHeader{}
+		writefmt = 0
+	}
+	payloadLen := uint32(len(Payload))
+	chk.wChkList[csid].MessageTypeID = MessageTypeID
+	chk.wChkList[csid].MessageLength = payloadLen
+
+	//制作基础头
+	writed := uint32(0)
+	for {
+		fmt.Println("-------------------", payloadLen)
+		//本次需要发送多少字节。
+		currenLen := chk.wChkSize
+		//剩余多少字节数据需要发送
+		remaining := payloadLen - writed
+		if remaining < currenLen {
+			currenLen = remaining
+		}
+
+		//是否第一次发送
+		if writed == 0 {
+			fmt.Println(chk.rspBasicHeader(writefmt, csid))
+			fmt.Println(chk.rspMsgHeader(writefmt, csid))
+			chk.Write(chk.rspBasicHeader(writefmt, csid))
+			chk.Write(chk.rspMsgHeader(writefmt, csid))
+		} else {
+			fmt.Println(chk.rspBasicHeader(3, csid))
+			chk.Write(chk.rspBasicHeader(3, csid))
+		}
+		//
+		fmt.Println(Payload[writed:(writed + currenLen)])
+		chk.Write(Payload[writed:(writed + currenLen)])
+
+		//数据发送完成
+		writed += currenLen
+		if writed >= payloadLen {
+			break
+		}
+	}
+	return chk.w.Flush()
+}

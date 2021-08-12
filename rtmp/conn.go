@@ -11,35 +11,20 @@ type Conn struct {
 	// Serve 数据结构
 	// 用来访问运行时数据
 	serve *Serve
+
 	// Tcp 网络IO
 	// 进行数据通讯处理
 	rwc *net.Conn
-	r   *bufio.Reader
-	w   *bufio.Writer
-	//读写字节统计
-	//rtmp协议中的需要
-	ReadChunkSize  int
-	WriteChunkSize int
 
-	SteamID uint32
-	// ChunkLists     map[uint32]Chunk
-	// SendChunkLists map[uint32]Chunk
 	App    string
 	Stream string
+
 	//是否有推送消息体的权限。
 	//是否是主播
 	IsPusher bool
 }
 
-func (c *Conn) ReadChunk() (*Chunk, error) {
-	chunk := &Chunk{
-		r:        c.r,
-		w:        c.w,
-		rChkList: make(map[uint32]*FmtHeader),
-	}
-	return chunk, nil
-}
-
+// 握手
 func (c *Conn) handShake() error {
 	err := ServeHandShake(*c.rwc)
 	return err
@@ -51,17 +36,26 @@ func (c *Conn) Close() {
 }
 
 //处理Rtmp消息协议
-func (c *Conn) connect() {
+func (c *Conn) Connect() {
 	defer c.Close()
-	//握手
+
+	// 握手
 	if err := c.handShake(); err != nil {
 		fmt.Println(err)
 	}
-	//获取 app 与 steam 消息
-	ck, err := c.ReadChunk()
-	if err != nil {
+
+	// 创建 Chunk Stream
+	chk := Chunk{
+		r:        bufio.NewReader(*c.rwc),
+		w:        bufio.NewWriter(*c.rwc),
+		rChkSize: uint32(DefaultChunkSize),
+		wChkSize: uint32(DefaultChunkSize),
+		rChkList: make(map[uint32]*MsgHeader),
+		wChkList: make(map[uint32]*MsgHeader),
+	}
+
+	//阻塞处理
+	if err := chk.Handle(c); err != nil {
 		fmt.Println(err)
 	}
-	ck.reqMsg()
-	fmt.Println(ck)
 }
