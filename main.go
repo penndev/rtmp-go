@@ -6,7 +6,7 @@ import (
 )
 
 func main() {
-	err := rtmp.Server()
+	err := rtmp.NewRtmp()
 	if err != nil {
 		fmt.Println(err)
 	}
