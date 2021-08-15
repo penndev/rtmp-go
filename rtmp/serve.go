@@ -11,18 +11,25 @@ type Serve struct {
 	Addr      string
 	ChunkSize int
 	Timeout   time.Duration
-
-	ln net.Listener
 }
 
-// 等待新的客户端连接
-// 并将连接进行rtmp消息化
-func (srv *Serve) accept() error {
+// 启动Tcp监听
+// 处理golang net Listenconfig 参数
+func (srv *Serve) listen() error {
+	var lc = net.ListenConfig{
+		KeepAlive: srv.Timeout,
+	}
+
+	ln, err := lc.Listen(context.Background(), "tcp", srv.Addr)
+	if err != nil {
+		return err
+	}
+	defer ln.Close()
+
 	for {
-		conn, err := srv.ln.Accept()
+		conn, err := ln.Accept()
 		if err != nil {
 			fmt.Print(err)
-			//conn.Close()
 			continue
 		}
 		var run = func() {
@@ -36,21 +43,6 @@ func (srv *Serve) accept() error {
 		}
 		go run()
 	}
-}
-
-// 启动Tcp监听
-// 处理golang net Listenconfig 参数
-func (srv *Serve) listen() error {
-	var lc = net.ListenConfig{
-		KeepAlive: srv.Timeout,
-	}
-	var err error
-	srv.ln, err = lc.Listen(context.Background(), "tcp", srv.Addr)
-	if err != nil {
-		return err
-	}
-	defer srv.ln.Close()
-	return nil
 }
 
 // 实例 Serve 结构体
@@ -68,9 +60,6 @@ func newServer() *Serve {
 func NewRtmp() error {
 	s := newServer()
 	if err := s.listen(); err != nil {
-		return err
-	}
-	if err := s.accept(); err != nil {
 		return err
 	}
 	return nil

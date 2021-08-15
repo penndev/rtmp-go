@@ -25,7 +25,7 @@ func (chk *Chunk) Handle(c *Conn) error {
 		switch header.MessageTypeID {
 		case 20:
 			item := amf.Decode(payload)
-			if err := chk.netCommands(item); err != nil {
+			if run, err := chk.netCommands(item); err != nil || run == false {
 				return err
 			}
 		default:
@@ -35,12 +35,12 @@ func (chk *Chunk) Handle(c *Conn) error {
 }
 
 // 处理create stream
-func (chk *Chunk) netCommands(item []amf.Value) error {
+func (chk *Chunk) netCommands(item []amf.Value) (bool, error) {
 	switch item[0] {
 	case "connect":
 		_, ok := item[2].(map[string]amf.Value)
 		if !ok {
-			return errors.New("err: connect->item[2].(map[string]amf.Value)")
+			return true, errors.New("err: connect->item[2].(map[string]amf.Value)")
 		}
 
 		repVer := make(map[string]amf.Value)
@@ -61,10 +61,10 @@ func (chk *Chunk) netCommands(item []amf.Value) error {
 			fmt.Println("处理messageStreamId=", int(tranId))
 			fmt.Println(content)
 			if err := chk.sendMsg(20, 3, content); err != nil {
-				return err
+				return true, err
 			}
 		} else {
-			return errors.New("err: connect->item[2].(float64);")
+			return true, errors.New("err: connect->item[2].(float64);")
 		}
 		fmt.Println("createStream.finish.")
 
@@ -79,13 +79,12 @@ func (chk *Chunk) netCommands(item []amf.Value) error {
 		chk.sendMsg(20, 3, content)
 
 	case "deleteStream":
-		// 7.2.2.3. deleteStream . . . . . . . . . . . . . . . . . . . 43
-
+		return false, nil
 	// 协议不带，但obs发送了的
 	case "releaseStream":
 	// 协议不带，但obs发送了的
 	case "FCPublish":
-
+	case "FCUnpublish":
 	default:
 		// 7.2.2.2. play2 . . . . . . . . . . . . . . . . . . . . . . 42
 		// 7.2.2.4. receiveAudio . . . . . . . . . . . . . . . . . . . 44
@@ -94,5 +93,5 @@ func (chk *Chunk) netCommands(item []amf.Value) error {
 		// 7.2.2.8. pause . . . . . . . . . . . . . . . . . . . . . . 47
 		panic("netCommands handle error:" + item[0].(string))
 	}
-	return nil
+	return true, nil
 }
