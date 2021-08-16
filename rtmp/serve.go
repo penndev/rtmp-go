@@ -3,6 +3,7 @@ package rtmp
 import (
 	"context"
 	"fmt"
+	"log"
 	"net"
 	"time"
 )
@@ -27,38 +28,37 @@ func (srv *Serve) listen() error {
 	defer ln.Close()
 
 	for {
-		conn, err := ln.Accept()
+		nc, err := ln.Accept()
 		if err != nil {
 			fmt.Print(err)
 			continue
 		}
 
 		go func() {
-			conn := &Conn{
-				serve:    srv,
-				rwc:      &conn,
-				IsPusher: false,
+			defer nc.Close()
+			conn, err := newConn(srv, &nc)
+			if err != nil {
+				log.Println(err)
+				return
 			}
-			//阻塞函数-处理Rtmp协议内容
-			conn.Connect()
+			chk := newChunk(&nc)
+			err = chk.Handle(conn)
+			if err != nil {
+				log.Println(err)
+			}
+			log.Println(nc.RemoteAddr().String(), "nc closeing")
 		}()
 	}
-}
-
-// 实例 Serve 结构体
-// 配置Rtmp参数
-func newServer() *Serve {
-	serve := &Serve{
-		Addr:    ":1935",
-		Timeout: 10 * time.Second,
-	}
-	return serve
 }
 
 // 运行Rtmp协议。
 // 阻塞函数
 func NewRtmp() error {
-	s := newServer()
+	s := &Serve{
+		Addr:    ":1935",
+		Timeout: 10 * time.Second,
+	}
+
 	if err := s.listen(); err != nil {
 		return err
 	}

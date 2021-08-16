@@ -1,8 +1,6 @@
 package rtmp
 
 import (
-	"bufio"
-	"fmt"
 	"net"
 )
 
@@ -35,31 +33,14 @@ func (c *Conn) Close() {
 	(*c.rwc).Close()
 }
 
-func newConn() *Conn {
-	return nil
-}
-
-//处理Rtmp消息协议
-func (c *Conn) Connect() {
-	defer c.Close()
-
-	// 握手
-	if err := c.handShake(); err != nil {
-		fmt.Println(err)
+//
+func newConn(srv *Serve, nc *net.Conn) (*Conn, error) {
+	c := &Conn{
+		serve:    srv,
+		rwc:      nc,
+		IsPusher: false,
 	}
 
-	// 创建 Chunk Stream
-	chk := Chunk{
-		r:        bufio.NewReader(*c.rwc),
-		w:        bufio.NewWriter(*c.rwc),
-		rChkSize: uint32(DefaultChunkSize),
-		wChkSize: uint32(DefaultChunkSize),
-		rChkList: make(map[uint32]*MsgHeader),
-		wChkList: make(map[uint32]*MsgHeader),
-	}
-
-	//阻塞处理
-	if err := chk.Handle(c); err != nil {
-		fmt.Println(err)
-	}
+	err := c.handShake()
+	return c, err
 }
