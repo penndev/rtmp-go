@@ -35,6 +35,10 @@ func (c *Conn) Close() {
 	(*c.rwc).Close()
 }
 
+func newConn() *Conn {
+	return nil
+}
+
 //处理Rtmp消息协议
 func (c *Conn) Connect() {
 	defer c.Close()

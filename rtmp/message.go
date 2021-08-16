@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"rtmp-go/amf"
+	"rtmp-go/av"
 )
 
 type MsgHeader struct {
@@ -15,7 +16,14 @@ type MsgHeader struct {
 }
 
 // 处理消息
+var VideoTime uint32
+
 func (chk *Chunk) Handle(c *Conn) error {
+
+	var flv av.FLV
+	flv.GenFlv("room.flv")
+	defer flv.Close()
+
 	for {
 		payload, err := chk.readMsg()
 		if err != nil {
@@ -25,9 +33,14 @@ func (chk *Chunk) Handle(c *Conn) error {
 		switch header.MessageTypeID {
 		case 20:
 			item := amf.Decode(payload)
-			if run, err := chk.netCommands(item); err != nil || run == false {
+			if run, err := chk.netCommands(item); err != nil || !run {
 				return err
 			}
+		case 18, 15: // Metadata
+			flv.AddTag(int(header.MessageTypeID), 0, payload[16:])
+		case 8, 9: // Video data
+			VideoTime += header.Timestamp
+			flv.AddTag(int(header.MessageTypeID), VideoTime, payload)
 		default:
 			fmt.Println("cant meet this MessageTypeID:", header.MessageTypeID)
 		}

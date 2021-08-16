@@ -32,7 +32,8 @@ func (srv *Serve) listen() error {
 			fmt.Print(err)
 			continue
 		}
-		var run = func() {
+
+		go func() {
 			conn := &Conn{
 				serve:    srv,
 				rwc:      &conn,
@@ -40,8 +41,7 @@ func (srv *Serve) listen() error {
 			}
 			//阻塞函数-处理Rtmp协议内容
 			conn.Connect()
-		}
-		go run()
+		}()
 	}
 }
 
