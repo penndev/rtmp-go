@@ -38,7 +38,6 @@ func (chk *Chunk) Handle(c *Conn) error {
 			return errors.New("cant meet this MessageTypeID:" + string(header.MessageTypeID))
 		}
 	}
-
 }
 
 // 处理create stream
