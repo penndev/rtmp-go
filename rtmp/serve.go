@@ -31,7 +31,6 @@ func (srv *Serve) listen() error {
 	// 启动av转发工作池
 	wp := newWorkPool()
 	srv.WorkPool = wp
-	go wp.run()
 	// 进行监听新连接。
 	for {
 		nc, err := ln.Accept()

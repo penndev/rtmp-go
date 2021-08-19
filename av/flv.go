@@ -6,10 +6,15 @@ import (
 	"os"
 )
 
-const Signature = "FLV"
-const Version byte = 1
+const (
+	Signature string = "FLV"
+	Version   byte   = 1
+)
 
-//Flags //"00000001" 1-只有视频 //"00000100" 4-只有音频  //"00000101" 5-有视频有音频
+// Flags  掩码位判断视频包含的内容。
+// "00000001" 1-只有视频
+// "00000100" 4-只有音频
+// "00000101" 5-有视频有音频
 var Flags = map[string]byte{"v": 1, "a": 4, "av": 5}
 
 var DataOffset = []byte{0, 0, 0, 9}
@@ -20,14 +25,18 @@ type Tag struct {
 	dataSize            int    //3 byte;data的长度
 	timeStreamp         uint32 //3 byte;时间戳
 	timeStreampExtended int    //1 byte;
-	streamID            int    //3 byte default [000];
 	tagData             []byte
 }
 
-//Tag genByte 描述tag参数，生成byte
+// Tag genByte
+// 根据tag内容，生成byte字节码
 func (t Tag) genByte() []byte {
 	tmpV := make([]byte, 4)
-	var tag []byte
+
+	// var tagLen int
+	tagLen := 2
+	var tag [tagLen]byte
+
 	//首先写入 tagType 1[]byte
 	tag = append(tag, byte(t.tagType))
 
