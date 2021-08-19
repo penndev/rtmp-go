@@ -21,8 +21,8 @@ var DataOffset = []byte{0, 0, 0, 9}
 
 //Tag 包含的详情
 type Tag struct {
-	tagType             int    //1 byte;8audio,9video,18scripts;
-	dataSize            int    //3 byte;data的长度
+	tagType             byte   //1 byte;8audio,9video,18scripts;
+	dataSize            uint32 //3 byte;data的长度
 	timeStreamp         uint32 //3 byte;时间戳
 	timeStreampExtended int    //1 byte;
 	tagData             []byte
@@ -32,17 +32,12 @@ type Tag struct {
 // 根据tag内容，生成byte字节码
 func (t Tag) genByte() []byte {
 	tmpV := make([]byte, 4)
-
-	// var tagLen int
-	tagLen := 2
-	var tag [tagLen]byte
-
-	//首先写入 tagType 1[]byte
-	tag = append(tag, byte(t.tagType))
+	// 1 + 3 + 3 + 1 + 3
+	// tag[0] = t.tagType
+	var tag []byte
 
 	//接着写入 tagDataSize 3[]byte
-	binary.BigEndian.PutUint32(tmpV, uint32(t.dataSize))
-	tag = append(tag, tmpV[1:]...)
+	binary.BigEndian.PutUint32(tmpV, (t.dataSize))
 
 	//接着写入 tagTimestamp 3[]byte
 	binary.BigEndian.PutUint32(tmpV, t.timeStreamp)
@@ -81,8 +76,8 @@ func (f *FLV) AddTag(tagType int, timeStreamp uint32, tagData []byte) {
 
 	//Tag Numb
 	var tag Tag
-	tag.tagType = tagType
-	tag.dataSize = len(tagData)
+	// tag.tagType = tagType
+	// tag.dataSize = len(tagData)
 	tag.timeStreamp = timeStreamp
 	tag.timeStreampExtended = 0
 	tag.tagData = tagData
