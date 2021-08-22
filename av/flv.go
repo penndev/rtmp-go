@@ -53,6 +53,7 @@ func (t Tag) genByte() []byte {
 type FLV struct {
 	File            *os.File
 	PreviousTagSize uint32
+	Timestamp       uint32
 }
 
 //GenHeader FLV 生成文件头。
@@ -68,9 +69,10 @@ func (f *FLV) genHead(flags string) []byte {
 
 //AddTag FLV 生成写入tag
 func (f *FLV) AddTag(tagType byte, timeStreamp uint32, tagData []byte) {
+	f.Timestamp += timeStreamp
 	var tag Tag
 	tag.tagType = tagType
-	tag.timeStreamp = timeStreamp
+	tag.timeStreamp = f.Timestamp
 	tag.timeStreampExtended = 0
 	tag.tagData = tagData
 	f.File.Write(tag.genByte())

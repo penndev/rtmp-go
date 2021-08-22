@@ -28,9 +28,9 @@ func (srv *Serve) listen() error {
 		return err
 	}
 	defer ln.Close()
-	// 启动av转发工作池
-	wp := newWorkPool()
-	srv.WorkPool = wp
+
+	srv.WorkPool = newWorkPool()
+
 	// 进行监听新连接。
 	for {
 		nc, err := ln.Accept()

@@ -2,20 +2,14 @@ package rtmp
 
 import (
 	"errors"
-	"fmt"
 	"log"
 	"rtmp-go/amf"
-	"rtmp-go/av"
 )
 
 // 处理消息
 var VideoTime uint32
 
 func (chk *Chunk) Handle(c *Conn) error {
-
-	var flv av.FLV
-	flv.GenFlv("room")
-	defer flv.Close()
 
 	for {
 		payload, err := chk.readMsg()
@@ -26,14 +20,25 @@ func (chk *Chunk) Handle(c *Conn) error {
 		switch header.MessageTypeID {
 		case 20:
 			item := amf.Decode(payload)
-			if stop, err := chk.netCommands(item); err != nil || stop {
+			if stop, err := chk.netCommands(item, c); err != nil || stop {
+				c.onPushStop()
 				return err
 			}
 		case 18, 15: // Metadata
-			flv.AddTag(int(header.MessageTypeID), 0, payload[16:])
+			pk := Pack{
+				Type:    header.MessageTypeID,
+				Time:    0,
+				Content: payload[16:],
+			}
+			c.onPushMate(pk)
 		case 8, 9: // Video data
 			VideoTime += header.Timestamp
-			flv.AddTag(int(header.MessageTypeID), VideoTime, payload)
+			pk := Pack{
+				Type:    header.MessageTypeID,
+				Time:    header.Timestamp,
+				Content: payload,
+			}
+			c.onPushAv(pk)
 		default:
 			return errors.New("cant meet this MessageTypeID:" + string(header.MessageTypeID))
 		}
@@ -42,7 +47,7 @@ func (chk *Chunk) Handle(c *Conn) error {
 
 // 处理create stream
 // bool 是否退出，通常当前推流结束
-func (chk *Chunk) netCommands(item []amf.Value) (bool, error) {
+func (chk *Chunk) netCommands(item []amf.Value, c *Conn) (bool, error) {
 	switch item[0] {
 	case "connect":
 		_, ok := item[2].(map[string]amf.Value)
@@ -65,7 +70,6 @@ func (chk *Chunk) netCommands(item []amf.Value) (bool, error) {
 	case "createStream":
 		if tranId, ok := item[1].(float64); ok {
 			content := amf.Encode([]amf.Value{"_result", int(tranId), nil, int(tranId)})
-			fmt.Println("处理messageStreamId=", int(tranId))
 			if err := chk.sendMsg(20, 3, content); err != nil {
 				return true, err
 			}
@@ -84,9 +88,17 @@ func (chk *Chunk) netCommands(item []amf.Value) (bool, error) {
 		content := amf.Encode([]amf.Value{"onStatus", 0, nil, res})
 		chk.sendMsg(20, 3, content)
 
+		var app, stream string
+		var ok bool
+		if app, ok = item[4].(string); !ok {
+			return true, errors.New("cant find app name")
+		}
+		if stream, ok = item[3].(string); !ok {
+			return true, errors.New("cant find app stream")
+		}
+		c.onSetPush(app, stream)
 	case "deleteStream":
 		return true, nil
-
 	// 协议不带，但obs发送了的
 	case "releaseStream":
 	case "FCPublish":

@@ -20,6 +20,8 @@ type Conn struct {
 	//是否有推送消息体的权限。
 	//是否是主播
 	IsPusher bool
+
+	PackChan chan Pack
 }
 
 // 握手
@@ -33,12 +35,29 @@ func (c *Conn) Close() {
 	(*c.rwc).Close()
 }
 
-//
+func (c *Conn) onPushMate(pk Pack) {
+	c.serve.WorkPool.Publish(c.App, c.PackChan)
+	c.PackChan <- pk
+}
+
+func (c *Conn) onPushAv(pk Pack) {
+	c.PackChan <- pk
+}
+
+func (c *Conn) onSetPush(app string, stream string) {
+	c.App = app
+}
+
+func (c *Conn) onPushStop() {
+	c.serve.WorkPool.ClosePublish(c.App, c.PackChan)
+}
+
 func newConn(srv *Serve, nc *net.Conn) (*Conn, error) {
 	c := &Conn{
 		serve:    srv,
 		rwc:      nc,
 		IsPusher: false,
+		PackChan: make(chan Pack),
 	}
 
 	err := c.handShake()
