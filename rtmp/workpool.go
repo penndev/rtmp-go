@@ -14,7 +14,7 @@ type Pack struct {
 }
 
 type WorkPool struct {
-	playList map[string]([]chan Pack)
+	playList map[string](map[chan Pack]bool)
 }
 
 func (wp *WorkPool) ClosePublish(room string, push chan Pack) {
@@ -30,7 +30,7 @@ func (wp *WorkPool) Publish(room string, push chan Pack) {
 	go func() {
 		for pck := range push {
 			flv.AddTag(pck.Type, pck.Time, pck.Content)
-			for _, py := range wp.playList[room] {
+			for py := range wp.playList[room] {
 				py <- pck
 			}
 		}
@@ -38,9 +38,22 @@ func (wp *WorkPool) Publish(room string, push chan Pack) {
 	}()
 }
 
+func (wp *WorkPool) Play(room string, play chan Pack) {
+
+	if _, ok := wp.playList["room"]; !ok {
+		wp.playList["room"] = make(map[chan Pack]bool)
+	}
+	wp.playList["room"][play] = true
+	go func() {
+		for pck := range play {
+			fmt.Println("play get->", pck.Type)
+		}
+	}()
+}
+
 func newWorkPool() *WorkPool {
 	wp := &WorkPool{
-		playList: make(map[string]([]chan Pack)),
+		playList: make(map[string]map[chan Pack]bool),
 	}
 	return wp
 }

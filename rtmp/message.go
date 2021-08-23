@@ -2,6 +2,7 @@ package rtmp
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"rtmp-go/amf"
 )
@@ -40,7 +41,7 @@ func (chk *Chunk) Handle(c *Conn) error {
 			}
 			c.onPushAv(pk)
 		default:
-			return errors.New("cant meet this MessageTypeID:" + string(header.MessageTypeID))
+			return errors.New("cant meet this MessageTypeID:" + fmt.Sprint(header.MessageTypeID))
 		}
 	}
 }
@@ -78,7 +79,8 @@ func (chk *Chunk) netCommands(item []amf.Value, c *Conn) (bool, error) {
 		}
 		log.Println("createStream.finish.")
 
-	// case "play":
+	case "play":
+		c.onPlay()
 	// 7.2.2.1. play . . . . . . . . . . . . . . . . . . . . . . . 38
 	case "publish":
 		res := make(map[string]amf.Value)
@@ -103,6 +105,7 @@ func (chk *Chunk) netCommands(item []amf.Value, c *Conn) (bool, error) {
 	case "releaseStream":
 	case "FCPublish":
 	case "FCUnpublish":
+	case "getStreamLength":
 	default:
 		// 7.2.2.2. play2 . . . . . . . . . . . . . . . . . . . . . . 42
 		// 7.2.2.4. receiveAudio . . . . . . . . . . . . . . . . . . . 44

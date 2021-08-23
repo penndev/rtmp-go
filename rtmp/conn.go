@@ -52,6 +52,10 @@ func (c *Conn) onPushStop() {
 	c.serve.WorkPool.ClosePublish(c.App, c.PackChan)
 }
 
+func (c *Conn) onPlay() {
+	c.serve.WorkPool.Play("live", c.PackChan)
+}
+
 func newConn(srv *Serve, nc *net.Conn) (*Conn, error) {
 	c := &Conn{
 		serve:    srv,
