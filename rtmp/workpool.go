@@ -18,6 +18,7 @@ type WorkPool struct {
 	PlayList  map[string](map[chan Pack]bool)
 	MateList  map[string]Pack
 	VideoList map[string]Pack
+	AudioList map[string]Pack
 }
 
 func (wp *WorkPool) ClosePublish(room string, push chan Pack) {
@@ -41,6 +42,21 @@ func (wp *WorkPool) Publish(room string, push chan Pack, pk Pack) {
 	flv.AddTag(pk.Type, pk.Time, pk.Content[16:])
 
 	go func() {
+		//存储
+		for pck := range push {
+			flv.AddTag(pck.Type, pck.Time, pck.Content)
+			if pck.Type == 9 {
+				wp.VideoList[room] = pck
+			}
+			if pck.Type == 8 {
+				wp.AudioList[room] = pck
+			}
+			if _, ok := wp.VideoList[room]; ok {
+				if _, ok := wp.AudioList[room]; ok {
+					break
+				}
+			}
+		}
 		for pck := range push {
 			flv.AddTag(pck.Type, pck.Time, pck.Content)
 			for py := range wp.PlayList[room] {
@@ -62,8 +78,10 @@ func (wp *WorkPool) Play(room string, play chan Pack) {
 
 func newWorkPool() *WorkPool {
 	wp := &WorkPool{
-		PlayList: make(map[string]map[chan Pack]bool),
-		MateList: make(map[string]Pack),
+		PlayList:  make(map[string]map[chan Pack]bool),
+		MateList:  make(map[string]Pack),
+		VideoList: make(map[string]Pack),
+		AudioList: make(map[string]Pack),
 	}
 	return wp
 }
