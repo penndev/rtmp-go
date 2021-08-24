@@ -273,7 +273,8 @@ func (chk *Chunk) readMsg() ([]byte, error) {
 		log.Println("Abort Message (2)")
 	case 3:
 		//  Acknowledgement (3) // 收到字节数对照
-		log.Println("Acknowledgement (3)")
+
+		log.Println("Acknowledgement (3)", payload)
 	case 5:
 		// Window Acknowledgement Size (5) // 发送数据对照
 		log.Println("Window Acknowledgement Size (5)")
@@ -321,6 +322,57 @@ func (chk *Chunk) sendMsg(MessageTypeID byte, csid uint32, Payload []byte) error
 		}
 		chk.Write(Payload[writed:(writed + currenLen)])
 
+		//数据发送完成
+		writed += currenLen
+		if writed >= payloadLen {
+			break
+		}
+	}
+	return chk.w.Flush()
+}
+
+func (chk *Chunk) sendAv(MessageTypeID byte, csid uint32, timestamp uint32, Payload []byte) error {
+	if csid < 2 {
+		return errors.New("csid cant < 2, 0 and 1 cant used")
+	}
+
+	writefmt := byte(1)
+	if _, ok := chk.wChkList[csid]; !ok {
+		chk.wChkList[csid] = &MsgHeader{}
+		writefmt = 0
+	}
+	payloadLen := uint32(len(Payload))
+	chk.wChkList[csid].MessageTypeID = MessageTypeID
+	chk.wChkList[csid].MessageLength = payloadLen
+	chk.wChkList[csid].Timestamp = timestamp
+	chk.wChkList[csid].MessageStreamID = 4
+
+	//制作基础头
+	writed := uint32(0)
+	for {
+		//本次需要发送多少字节。
+		currenLen := chk.wChkSize
+		//剩余多少字节数据需要发送
+		remaining := payloadLen - writed
+
+		if remaining < currenLen {
+			currenLen = remaining
+		}
+		// log.Println("剩余字节->", remaining, "已写字节->", payloadLen, "本次写字节->", currenLen)
+		//是否第一次发送
+		if writed == 0 {
+			genBH := chk.rspBasicHeader(writefmt, csid)
+			// log.Println("基础头->", genBH)
+			chk.Write(genBH)
+			genMH := chk.rspMsgHeader(writefmt, csid)
+			// log.Println("消息头->", genMH)
+			chk.Write(genMH)
+		} else {
+			genMH := chk.rspBasicHeader(2, csid)
+			// log.Println("基础->", genMH)
+			chk.Write(genMH)
+		}
+		chk.Write(Payload[writed:(writed + currenLen)])
 		//数据发送完成
 		writed += currenLen
 		if writed >= payloadLen {

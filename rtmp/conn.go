@@ -36,8 +36,7 @@ func (c *Conn) Close() {
 }
 
 func (c *Conn) onPushMate(pk Pack) {
-	c.serve.WorkPool.Publish(c.App, c.PackChan)
-	c.PackChan <- pk
+	c.serve.WorkPool.Publish(c.App, c.PackChan, pk)
 }
 
 func (c *Conn) onPushAv(pk Pack) {

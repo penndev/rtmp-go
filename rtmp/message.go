@@ -1,6 +1,7 @@
 package rtmp
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"log"
@@ -29,7 +30,7 @@ func (chk *Chunk) Handle(c *Conn) error {
 			pk := Pack{
 				Type:    header.MessageTypeID,
 				Time:    0,
-				Content: payload[16:],
+				Content: payload,
 			}
 			c.onPushMate(pk)
 		case 8, 9: // Video data
@@ -40,6 +41,9 @@ func (chk *Chunk) Handle(c *Conn) error {
 				Content: payload,
 			}
 			c.onPushAv(pk)
+		case 4:
+			item := amf.Decode(payload)
+			fmt.Println("message 4:", item)
 		default:
 			return errors.New("cant meet this MessageTypeID:" + fmt.Sprint(header.MessageTypeID))
 		}
@@ -80,7 +84,39 @@ func (chk *Chunk) netCommands(item []amf.Value, c *Conn) (bool, error) {
 		log.Println("createStream.finish.")
 
 	case "play":
+
+		streamContent := make([]byte, 6)
+		binary.BigEndian.PutUint32(streamContent[2:], 4)
+		chk.sendMsg(4, 3, streamContent)
+
+		res := make(map[string]amf.Value)
+		res["level"] = "status"
+		res["code"] = "NetStream.Play.Start"
+		res["description"] = "Start playing"
+		resp := amf.Encode([]amf.Value{"onStatus", 0, nil, res})
+		chk.sendMsg(20, 3, resp)
+
 		c.onPlay()
+		pack := c.serve.WorkPool.MateList["live"]
+		chk.sendMsg(20, 3, pack.Content)
+		go func() {
+			//首先初始化关键帧
+			for pck := range c.PackChan {
+				if pck.Type == 9 {
+					k := pck.Content[0]
+					if k>>4 == 1 {
+						log.Println(pck.Type, pck.Time, len(pck.Content))
+						chk.sendAv(pck.Type, 4, pck.Time, pck.Content)
+						break
+					}
+				}
+			}
+			// panic("debug.")
+			for pck := range c.PackChan {
+				chk.sendAv(pck.Type, 4, pck.Time, pck.Content)
+			}
+		}()
+
 	// 7.2.2.1. play . . . . . . . . . . . . . . . . . . . . . . . 38
 	case "publish":
 		res := make(map[string]amf.Value)
