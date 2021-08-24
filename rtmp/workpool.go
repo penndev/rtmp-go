@@ -15,8 +15,9 @@ type Pack struct {
 }
 
 type WorkPool struct {
-	PlayList map[string](map[chan Pack]bool)
-	MateList map[string]Pack
+	PlayList  map[string](map[chan Pack]bool)
+	MateList  map[string]Pack
+	VideoList map[string]Pack
 }
 
 func (wp *WorkPool) ClosePublish(room string, push chan Pack) {
