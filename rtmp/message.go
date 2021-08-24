@@ -99,13 +99,19 @@ func (chk *Chunk) netCommands(item []amf.Value, c *Conn) (bool, error) {
 		c.onPlay()
 		pack := c.serve.WorkPool.MateList["live"]
 		chk.sendMsg(20, 3, pack.Content)
+
+		packV := c.serve.WorkPool.VideoList["live"]
+		chk.sendMsg(9, 4, packV.Content)
+
+		packA := c.serve.WorkPool.AudioList["live"]
+		chk.sendMsg(8, 4, packA.Content)
+
 		go func() {
 			//首先初始化关键帧
 			for pck := range c.PackChan {
 				if pck.Type == 9 {
 					k := pck.Content[0]
 					if k>>4 == 1 {
-						log.Println(pck.Type, pck.Time, len(pck.Content))
 						chk.sendAv(pck.Type, 4, pck.Time, pck.Content)
 						break
 					}
