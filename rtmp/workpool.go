@@ -21,8 +21,11 @@ type WorkPool struct {
 	AudioList map[string]Pack
 }
 
-func (wp *WorkPool) ClosePublish(room string, push chan Pack) {
+func (wp *WorkPool) Close(room string, push chan Pack) {
 	close(push)
+	delete(wp.MateList, room)
+	delete(wp.VideoList, room)
+	delete(wp.AudioList, room)
 }
 
 func (wp *WorkPool) Publish(room string, push chan Pack, pk Pack) {
@@ -42,7 +45,7 @@ func (wp *WorkPool) Publish(room string, push chan Pack, pk Pack) {
 	flv.AddTag(pk.Type, pk.Time, pk.Content[16:])
 
 	go func() {
-		//存储
+		//存储解码信息。
 		for pck := range push {
 			flv.AddTag(pck.Type, pck.Time, pck.Content)
 			if pck.Type == 9 {
@@ -57,6 +60,7 @@ func (wp *WorkPool) Publish(room string, push chan Pack, pk Pack) {
 				}
 			}
 		}
+
 		for pck := range push {
 			flv.AddTag(pck.Type, pck.Time, pck.Content)
 			for py := range wp.PlayList[room] {
@@ -68,12 +72,10 @@ func (wp *WorkPool) Publish(room string, push chan Pack, pk Pack) {
 }
 
 func (wp *WorkPool) Play(room string, play chan Pack) {
-
 	if _, ok := wp.PlayList[room]; !ok {
 		wp.PlayList[room] = make(map[chan Pack]bool)
 	}
 	wp.PlayList[room][play] = true
-
 }
 
 func newWorkPool() *WorkPool {

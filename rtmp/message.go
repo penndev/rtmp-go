@@ -4,15 +4,11 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"log"
 	"rtmp-go/amf"
 )
 
 // 处理消息
-var VideoTime uint32
-
 func (chk *Chunk) Handle(c *Conn) error {
-
 	for {
 		payload, err := chk.readMsg()
 		if err != nil {
@@ -34,7 +30,6 @@ func (chk *Chunk) Handle(c *Conn) error {
 			}
 			c.onPushMate(pk)
 		case 8, 9: // Video data
-			VideoTime += header.Timestamp
 			pk := Pack{
 				Type:    header.MessageTypeID,
 				Time:    header.Timestamp,
@@ -45,13 +40,11 @@ func (chk *Chunk) Handle(c *Conn) error {
 			item := amf.Decode(payload)
 			fmt.Println("message 4:", item)
 		default:
-			return errors.New("cant meet this MessageTypeID:" + fmt.Sprint(header.MessageTypeID))
+			return errors.New("Cont handle todo MessageTypeID:" + fmt.Sprint(header.MessageTypeID))
 		}
 	}
 }
 
-// 处理create stream
-// bool 是否退出，通常当前推流结束
 func (chk *Chunk) netCommands(item []amf.Value, c *Conn) (bool, error) {
 	switch item[0] {
 	case "connect":
@@ -59,7 +52,6 @@ func (chk *Chunk) netCommands(item []amf.Value, c *Conn) (bool, error) {
 		if !ok {
 			return true, errors.New("err: connect->item[2].(map[string]amf.Value)")
 		}
-
 		repVer := make(map[string]amf.Value)
 		repVer["fmsVer"] = "FMS/3,0,1,123"
 		repVer["capabilities"] = 31
@@ -71,8 +63,6 @@ func (chk *Chunk) netCommands(item []amf.Value, c *Conn) (bool, error) {
 		content := amf.Encode([]amf.Value{"_result", 1, repVer, repStatus})
 		chk.sendMsg(20, 3, content)
 		chk.setWindowAcknowledgementSize(2500000)
-	// case "Call":
-	// 7.2.1.2. Call . . . . . . . . . . . . . . . . . . . . . . . 35
 	case "createStream":
 		if tranId, ok := item[1].(float64); ok {
 			content := amf.Encode([]amf.Value{"_result", int(tranId), nil, int(tranId)})
@@ -82,10 +72,7 @@ func (chk *Chunk) netCommands(item []amf.Value, c *Conn) (bool, error) {
 		} else {
 			return true, errors.New("err: connect->item[2].(float64);")
 		}
-		log.Println("createStream.finish.")
-
 	case "play":
-
 		streamContent := make([]byte, 6)
 		binary.BigEndian.PutUint32(streamContent[2:], 4)
 		chk.sendMsg(4, 3, streamContent)
@@ -123,8 +110,6 @@ func (chk *Chunk) netCommands(item []amf.Value, c *Conn) (bool, error) {
 				chk.sendAv(pck.Type, 4, pck.Time, pck.Content)
 			}
 		}()
-
-	// 7.2.2.1. play . . . . . . . . . . . . . . . . . . . . . . . 38
 	case "publish":
 		res := make(map[string]amf.Value)
 		res["level"] = "status"
@@ -144,17 +129,14 @@ func (chk *Chunk) netCommands(item []amf.Value, c *Conn) (bool, error) {
 		c.onSetPush(app, stream)
 	case "deleteStream":
 		return true, nil
-	// 协议不带，但obs发送了的
+	// 处理兼容性
+	// 协议不带，但(obs vlc ffmpeg)发送了的
 	case "releaseStream":
 	case "FCPublish":
 	case "FCUnpublish":
 	case "getStreamLength":
+	//  处理兼容性匹配End
 	default:
-		// 7.2.2.2. play2 . . . . . . . . . . . . . . . . . . . . . . 42
-		// 7.2.2.4. receiveAudio . . . . . . . . . . . . . . . . . . . 44
-		// 7.2.2.5. receiveVideo . . . . . . . . . . . . . . . . . . . 45
-		// 7.2.2.7. seek . . . . . . . . . . . . . . . . . . . . . . . 46
-		// 7.2.2.8. pause . . . . . . . . . . . . . . . . . . . . . . 47
 		return true, errors.New("netCommands handle error:" + item[0].(string))
 	}
 	return false, nil

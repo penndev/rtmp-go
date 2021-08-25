@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
-	"log"
 	"net"
 )
 
@@ -270,17 +269,17 @@ func (chk *Chunk) readMsg() ([]byte, error) {
 		chk.rChkSize = binary.BigEndian.Uint32(payload)
 	case 2:
 		//Abort Message (2) //中止消息。
-		log.Println("Abort Message (2)")
+		// log.Println("Abort Message (2)")
 	case 3:
 		//  Acknowledgement (3) // 收到字节数对照
 		//  每当收到Window Acknowledgement Size字节数据则发送ack确认消息。
-		log.Println("Acknowledgement (3)", payload)
+		// log.Println("Acknowledgement (3)", payload)
 	case 5:
 		// Window Acknowledgement Size (5) // 发送数据对照
-		log.Println("Window Acknowledgement Size (5)")
+		// log.Println("Window Acknowledgement Size (5)")
 	case 6:
 		//  Set Peer Bandwidth (6) //限制传送速率
-		log.Println("Set Peer Bandwidth (6)")
+		// log.Println("Set Peer Bandwidth (6)")
 	default:
 		return payload, nil
 

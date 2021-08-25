@@ -48,7 +48,7 @@ func (c *Conn) onSetPush(app string, stream string) {
 }
 
 func (c *Conn) onPushStop() {
-	c.serve.WorkPool.ClosePublish(c.App, c.PackChan)
+	c.serve.WorkPool.Close(c.App, c.PackChan)
 }
 
 func (c *Conn) onPlay() {
