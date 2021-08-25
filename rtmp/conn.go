@@ -36,6 +36,7 @@ func (c *Conn) Close() {
 }
 
 func (c *Conn) onPushMate(pk Pack) {
+	c.IsPusher = true
 	c.serve.WorkPool.Publish(c.App, c.PackChan, pk)
 }
 
@@ -47,12 +48,16 @@ func (c *Conn) onSetPush(app string, stream string) {
 	c.App = app
 }
 
+func (c *Conn) onConnect(app string) {
+	c.App = app
+}
+
 func (c *Conn) onPushStop() {
 	c.serve.WorkPool.Close(c.App, c.PackChan)
 }
 
 func (c *Conn) onPlay() {
-	c.serve.WorkPool.Play("live", c.PackChan)
+	c.serve.WorkPool.Play(c.App, c.PackChan)
 }
 
 func newConn(srv *Serve, nc *net.Conn) (*Conn, error) {

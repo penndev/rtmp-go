@@ -9,6 +9,10 @@ import (
 
 // 处理消息
 func (chk *Chunk) Handle(c *Conn) error {
+	// defer func() {
+	// 	delete(c.serve.WorkPool.PlayList[c.App], c.PackChan)
+	// 	close(c.PackChan)
+	// }()
 	for {
 		payload, err := chk.readMsg()
 		if err != nil {
@@ -48,10 +52,13 @@ func (chk *Chunk) Handle(c *Conn) error {
 func (chk *Chunk) netCommands(item []amf.Value, c *Conn) (bool, error) {
 	switch item[0] {
 	case "connect":
-		_, ok := item[2].(map[string]amf.Value)
+		media, ok := item[2].(map[string]amf.Value)
 		if !ok {
 			return true, errors.New("err: connect->item[2].(map[string]amf.Value)")
 		}
+		app := media["app"].(string)
+		c.onConnect(app)
+
 		repVer := make(map[string]amf.Value)
 		repVer["fmsVer"] = "FMS/3,0,1,123"
 		repVer["capabilities"] = 31
@@ -118,15 +125,15 @@ func (chk *Chunk) netCommands(item []amf.Value, c *Conn) (bool, error) {
 		content := amf.Encode([]amf.Value{"onStatus", 0, nil, res})
 		chk.sendMsg(20, 3, content)
 
-		var app, stream string
-		var ok bool
-		if app, ok = item[4].(string); !ok {
-			return true, errors.New("cant find app name")
-		}
-		if stream, ok = item[3].(string); !ok {
-			return true, errors.New("cant find app stream")
-		}
-		c.onSetPush(app, stream)
+		// var app, stream string
+		// var ok bool
+		// if app, ok = item[4].(string); !ok {
+		// 	return true, errors.New("cant find app name")
+		// }
+		// if stream, ok = item[3].(string); !ok {
+		// 	return true, errors.New("cant find app stream")
+		// }
+		// c.onSetPush(app, stream)
 	case "deleteStream":
 		return true, nil
 	// 处理兼容性

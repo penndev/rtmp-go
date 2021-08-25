@@ -22,7 +22,7 @@ type WorkPool struct {
 }
 
 func (wp *WorkPool) Close(room string, push chan Pack) {
-	close(push)
+	// close(push)
 	delete(wp.MateList, room)
 	delete(wp.VideoList, room)
 	delete(wp.AudioList, room)
