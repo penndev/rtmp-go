@@ -70,6 +70,7 @@ func (chk *Chunk) netCommands(item []amf.Value, c *Conn) (bool, error) {
 		repStatus["objectEncoding"] = 3
 		content := amf.Encode([]amf.Value{"_result", 1, repVer, repStatus})
 		chk.sendMsg(20, 3, content)
+		chk.setWindowAcknowledgementSize(2500000)
 	// case "Call":
 	// 7.2.1.2. Call . . . . . . . . . . . . . . . . . . . . . . . 35
 	case "createStream":

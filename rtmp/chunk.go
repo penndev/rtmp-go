@@ -273,7 +273,7 @@ func (chk *Chunk) readMsg() ([]byte, error) {
 		log.Println("Abort Message (2)")
 	case 3:
 		//  Acknowledgement (3) // 收到字节数对照
-
+		//  每当收到Window Acknowledgement Size字节数据则发送ack确认消息。
 		log.Println("Acknowledgement (3)", payload)
 	case 5:
 		// Window Acknowledgement Size (5) // 发送数据对照
@@ -358,28 +358,22 @@ func (chk *Chunk) sendAv(MessageTypeID byte, csid uint32, timestamp uint32, Payl
 		if remaining < currenLen {
 			currenLen = remaining
 		}
-		// log.Println("剩余字节->", remaining, "已写字节->", payloadLen, "本次写字节->", currenLen)
 		//是否第一次发送
 		if writed == 0 {
-			genBH := chk.rspBasicHeader(writefmt, csid)
-			// log.Println("基础头->", genBH)
-			chk.Write(genBH)
-			genMH := chk.rspMsgHeader(writefmt, csid)
-			// log.Println("消息头->", genMH)
-			chk.Write(genMH)
+			chk.Write(chk.rspBasicHeader(writefmt, csid))
+			chk.Write(chk.rspMsgHeader(writefmt, csid))
 		} else {
-			genMH := chk.rspBasicHeader(2, csid)
-			// log.Println("基础->", genMH)
-			chk.Write(genMH)
+			chk.Write(chk.rspBasicHeader(3, csid))
 		}
 		chk.Write(Payload[writed:(writed + currenLen)])
+		chk.w.Flush()
 		//数据发送完成
 		writed += currenLen
 		if writed >= payloadLen {
 			break
 		}
 	}
-	return chk.w.Flush()
+	return nil
 }
 
 // 创建 Chunk Stream
@@ -392,4 +386,10 @@ func newChunk(c *net.Conn) *Chunk {
 		rChkList: make(map[uint32]*MsgHeader),
 		wChkList: make(map[uint32]*MsgHeader),
 	}
+}
+
+func (chk *Chunk) setWindowAcknowledgementSize(size uint32) {
+	sizeByte := make([]byte, 4)
+	binary.BigEndian.PutUint32(sizeByte, size)
+	chk.sendMsg(5, 2, sizeByte)
 }
