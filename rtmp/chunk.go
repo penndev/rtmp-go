@@ -1,4 +1,4 @@
-// 当前所有实现都是根据下面的rtmp协议文档进行实现
+// 当前代码都是根据rtmp协议文档进行实现
 // https://www.adobe.com/content/dam/acom/en/devnet/rtmp/pdf/rtmp_specification_1.0.pdf
 
 package rtmp
@@ -320,10 +320,22 @@ func (chk *Chunk) sendMsg(MessageTypeID byte, csid uint32, Payload []byte) error
 	return nil
 }
 
+// - 底层协议控制传送速率
 func (chk *Chunk) setWindowAcknowledgementSize(size uint32) {
 	sizeByte := make([]byte, 4)
 	binary.BigEndian.PutUint32(sizeByte, size)
 	chk.sendMsg(5, 2, sizeByte)
+}
+
+// no message is larger than 16777215 bytes.
+func (chk *Chunk) setChunkSize(size uint32) {
+	// if size > 16777215 {
+	// 报错 无效
+	// }
+	sizeByte := make([]byte, 4)
+	binary.BigEndian.PutUint32(sizeByte, size)
+	chk.sendMsg(1, 2, sizeByte)
+	chk.writeChunkSize = size
 }
 
 // 创建 Chunk Stream
