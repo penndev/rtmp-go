@@ -1,6 +1,7 @@
 package rtmp
 
 import (
+	"fmt"
 	"net"
 )
 
@@ -32,7 +33,8 @@ func (c *Conn) handShake() error {
 
 // 关闭rtmp连接，做一些清理。
 func (c *Conn) Close() {
-	(*c.rwc).Close()
+	err := (*c.rwc).Close()
+	fmt.Println("close the conn->", err)
 }
 
 func (c *Conn) onPushMate(pk Pack) {
@@ -44,17 +46,17 @@ func (c *Conn) onPushAv(pk Pack) {
 	c.PackChan <- pk
 }
 
-func (c *Conn) onSetPush(app string, stream string) {
-	c.App = app
-}
+// func (c *Conn) onSetPush(app string, stream string) {
+// 	c.App = app
+// }
 
 func (c *Conn) onConnect(app string) {
 	c.App = app
 }
 
-func (c *Conn) onPushStop() {
-	c.serve.WorkPool.Close(c.App, c.PackChan)
-}
+// func (c *Conn) onPushStop() {
+// 	c.serve.WorkPool.Close(c.App, c.PackChan)
+// }
 
 func (c *Conn) onPlay() {
 	c.serve.WorkPool.Play(c.App, c.PackChan)

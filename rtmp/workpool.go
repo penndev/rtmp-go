@@ -22,7 +22,10 @@ type WorkPool struct {
 }
 
 func (wp *WorkPool) Close(room string, push chan Pack) {
-	// close(push)
+	for py := range wp.PlayList[room] {
+		close(py)
+	}
+	delete(wp.PlayList, room)
 	delete(wp.MateList, room)
 	delete(wp.VideoList, room)
 	delete(wp.AudioList, room)

@@ -9,10 +9,15 @@ import (
 
 // 处理消息
 func (chk *Chunk) Handle(c *Conn) error {
-	// defer func() {
-	// 	delete(c.serve.WorkPool.PlayList[c.App], c.PackChan)
-	// 	close(c.PackChan)
-	// }()
+	defer func() {
+		if c.IsPusher {
+			c.serve.WorkPool.Close(c.App, c.PackChan)
+		} else {
+			delete(c.serve.WorkPool.PlayList[c.App], c.PackChan)
+		}
+		// close(c.PackChan)
+		//关闭了两次chan 引起 panic
+	}()
 	for {
 		payload, err := chk.readMsg()
 		if err != nil {
@@ -23,7 +28,6 @@ func (chk *Chunk) Handle(c *Conn) error {
 		case 20:
 			item := amf.Decode(payload)
 			if stop, err := chk.netCommands(item, c); err != nil || stop {
-				c.onPushStop()
 				return err
 			}
 		case 18, 15: // Metadata
@@ -82,7 +86,7 @@ func (chk *Chunk) netCommands(item []amf.Value, c *Conn) (bool, error) {
 	case "play":
 		streamContent := make([]byte, 6)
 		binary.BigEndian.PutUint32(streamContent[2:], 4)
-		chk.sendMsg(4, 3, streamContent)
+		chk.sendMsg(4, 2, streamContent)
 
 		res := make(map[string]amf.Value)
 		res["level"] = "status"
@@ -92,13 +96,13 @@ func (chk *Chunk) netCommands(item []amf.Value, c *Conn) (bool, error) {
 		chk.sendMsg(20, 3, resp)
 
 		c.onPlay()
-		pack := c.serve.WorkPool.MateList["live"]
+		pack := c.serve.WorkPool.MateList[c.App]
 		chk.sendMsg(20, 3, pack.Content)
 
-		packV := c.serve.WorkPool.VideoList["live"]
+		packV := c.serve.WorkPool.VideoList[c.App]
 		chk.sendMsg(9, 4, packV.Content)
 
-		packA := c.serve.WorkPool.AudioList["live"]
+		packA := c.serve.WorkPool.AudioList[c.App]
 		chk.sendMsg(8, 4, packA.Content)
 
 		go func() {
@@ -112,10 +116,15 @@ func (chk *Chunk) netCommands(item []amf.Value, c *Conn) (bool, error) {
 					}
 				}
 			}
-			// panic("debug.")
 			for pck := range c.PackChan {
 				chk.sendAv(pck.Type, 4, pck.Time, pck.Content)
 			}
+			streamContent := make([]byte, 6)
+			binary.BigEndian.PutUint32(streamContent[2:], 4)
+			streamContent[1] = 1
+			chk.sendMsg(4, 2, streamContent)
+			// 关闭。
+			c.Close()
 		}()
 	case "publish":
 		res := make(map[string]amf.Value)
