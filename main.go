@@ -1,9 +1,13 @@
 package main
 
 import (
+	"fmt"
 	"rtmp-go/rtmp"
 )
 
 func main() {
-	rtmp.Serve()
+	err := rtmp.NewRtmp()
+	if err != nil {
+		fmt.Println(err)
+	}
 }

@@ -1,126 +1,75 @@
 package rtmp
 
 import (
-	"bufio"
-	"io"
-	"log"
+	"fmt"
 	"net"
 )
 
-// conn read size and write size
-type rwByteSize struct {
-	read  int
-	write int
-}
-
-// A Conn represents the server side of an HTTP connection.
+//依据rtmp对tcp进行封装
 type Conn struct {
-	// server is the server on which the connection arrived.
-	// Immutable; never nil.
-	Server *Server
-	rwc    net.Conn
+	// Serve 数据结构
+	// 用来访问运行时数据
+	serve *Serve
 
-	r          *bufio.Reader
-	w          *bufio.Writer
-	rwByteSize *rwByteSize
-	remoteAddr string
-	closed     bool
+	// Tcp 网络IO
+	// 进行数据通讯处理
+	rwc *net.Conn
 
-	ReadChunkSize  int
-	WriteChunkSize int
-	SteamID        uint32
-	ChunkLists     map[uint32]Chunk
-	SendChunkLists map[uint32]Chunk
-	App            string
-	Stream         string
-	IsPusher       bool
+	App    string
+	Stream string
+
+	//是否有推送消息体的权限。
+	//是否是主播
+	IsPusher bool
+
+	PackChan chan Pack
 }
 
+// 握手
 func (c *Conn) handShake() error {
-	err := ServeHandShake(c.rwc)
+	err := ServeHandShake(*c.rwc)
 	return err
 }
 
-// Close this connection.
+// 关闭rtmp连接，做一些清理。
 func (c *Conn) Close() {
-	c.closed = true
-	c.rwc.Close()
+	err := (*c.rwc).Close()
+	fmt.Println("close the conn->", err)
 }
 
-// ReadFull 读取net.Conn 数据，并且增加统计
-func (c *Conn) ReadFull(length int) ([]byte, error) {
-	buf := make([]byte, length)
-	l, err := io.ReadFull(c.r, buf)
-	c.rwByteSize.read += l
-	return buf, err
+func (c *Conn) onPushMate(pk Pack) {
+	c.IsPusher = true
+	c.serve.WorkPool.Publish(c.App, c.PackChan, pk)
 }
 
-//ReadByte 读取单个字节
-func (c *Conn) ReadByte() (byte, error) {
-	c.rwByteSize.read++
-	return c.r.ReadByte()
+func (c *Conn) onPushAv(pk Pack) {
+	c.PackChan <- pk
 }
 
-// Write 写数据。
-func (c *Conn) Write(buf []byte) (int, error) {
-	l, err := c.w.Write(buf)
-	c.rwByteSize.write += l
-	c.w.Flush()
-	return l, err
+// func (c *Conn) onSetPush(app string, stream string) {
+// 	c.App = app
+// }
+
+func (c *Conn) onConnect(app string) {
+	c.App = app
 }
 
-// 开始处理 流
-func (c *Conn) stream() error {
-	chk := newChunk(c)
-	for {
-		//read chunk message
-		if err := chk.ReadMsg(); err != nil {
-			return err
-		}
-		//ctrl message
-		if err := newMessage(chk); err != nil {
-			return err
-		}
-		//exit the client
-		if c.closed {
-			return nil
-		}
+// func (c *Conn) onPushStop() {
+// 	c.serve.WorkPool.Close(c.App, c.PackChan)
+// }
+
+func (c *Conn) onPlay() {
+	c.serve.WorkPool.Play(c.App, c.PackChan)
+}
+
+func newConn(srv *Serve, nc *net.Conn) (*Conn, error) {
+	c := &Conn{
+		serve:    srv,
+		rwc:      nc,
+		IsPusher: false,
+		PackChan: make(chan Pack),
 	}
-}
 
-// 开始处理Rtmp
-func (c *Conn) serve() {
-	c.remoteAddr = c.rwc.RemoteAddr().String()
-	defer c.Close()
-	//Handshake
-	if err := c.handShake(); err != nil {
-		log.Println("c.handShake err ->:", err)
-	}
-	//NetConnection
-	//NetStream
-	if err := c.stream(); err != nil {
-		log.Println("c.stream err ->:", err)
-	}
-}
-
-// Return a Instantiated method
-func newConn(srv *Server, rw net.Conn) *Conn {
-	conn := &Conn{
-		Server:         srv,
-		ReadChunkSize:  srv.ChunkSize, //单个client独立一个chunksize。
-		WriteChunkSize: 4096,
-
-		rwc:        rw,
-		r:          bufio.NewReader(rw),
-		w:          bufio.NewWriter(rw),
-		remoteAddr: rw.RemoteAddr().String(),
-		rwByteSize: &rwByteSize{},
-		closed:     false,
-
-		SteamID:        4,
-		ChunkLists:     make(map[uint32]Chunk),
-		SendChunkLists: make(map[uint32]Chunk),
-		IsPusher:       false,
-	}
-	return conn
+	err := c.handShake()
+	return c, err
 }

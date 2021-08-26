@@ -6,48 +6,46 @@ import (
 	"os"
 )
 
-const Signature = "FLV"
-const Version byte = 1
+const (
+	Signature string = "FLV"
+	Version   byte   = 1
+)
 
-//Flags //"00000001" 1-只有视频 //"00000100" 4-只有音频  //"00000101" 5-有视频有音频
+// Flags  掩码位判断视频包含的内容。
+// "00000001" 1-只有视频
+// "00000100" 4-只有音频
+// "00000101" 5-有视频有音频
 var Flags = map[string]byte{"v": 1, "a": 4, "av": 5}
 
 var DataOffset = []byte{0, 0, 0, 9}
 
 //Tag 包含的详情
 type Tag struct {
-	tagType             int    //1 byte;8audio,9video,18scripts;
-	dataSize            int    //3 byte;data的长度
+	tagType             byte   //1 byte;8audio,9video,18scripts;
 	timeStreamp         uint32 //3 byte;时间戳
-	timeStreampExtended int    //1 byte;
-	streamID            int    //3 byte default [000];
+	timeStreampExtended byte   //1 byte;
 	tagData             []byte
 }
 
-//Tag genByte 描述tag参数，生成byte
+// Tag genByte
+// 根据tag内容
+// 生成byte字节码
 func (t Tag) genByte() []byte {
-	tmpV := make([]byte, 4)
-	var tag []byte
-	//首先写入 tagType 1[]byte
-	tag = append(tag, byte(t.tagType))
-
-	//接着写入 tagDataSize 3[]byte
-	binary.BigEndian.PutUint32(tmpV, uint32(t.dataSize))
-	tag = append(tag, tmpV[1:]...)
-
-	//接着写入 tagTimestamp 3[]byte
-	binary.BigEndian.PutUint32(tmpV, t.timeStreamp)
-	tag = append(tag, tmpV[1:]...)
-
-	//接着写入 tagTimestampExtend 1[]byte
-	tag = append(tag, 0)
-	//写入固定的 tagSteamID  3[]byte
-	tag = append(tag, 0, 0, 0)
-	//写入 tagData define‘s[]byte
-	tag = append(tag, t.tagData...)
-	//Last PreviousTagSize 4[]byte
-	binary.BigEndian.PutUint32(tmpV, uint32(t.dataSize+11))
-	tag = append(tag, tmpV...)
+	dataLen := len(t.tagData)
+	tag := make([]byte, 11+dataLen+4)
+	// tagDataSize 3[]byte
+	binary.BigEndian.PutUint32(tag[:4], uint32(dataLen))
+	// type 1 byte
+	tag[0] = t.tagType
+	// timeStreamp 3[]byte
+	binary.BigEndian.PutUint32(tag[4:8], t.timeStreamp)
+	copy(tag[4:7], tag[5:8])
+	// tagTimestampExtend 1 byte
+	tag[7] = t.timeStreampExtended
+	// 9 10 11 tagSteamID ｜ 8 - 9 - 10 | put 0
+	// put tagdata
+	copy(tag[11:], t.tagData)
+	binary.BigEndian.PutUint32(tag[11+dataLen:], uint32(dataLen+11))
 	return tag
 }
 
@@ -55,30 +53,28 @@ func (t Tag) genByte() []byte {
 type FLV struct {
 	File            *os.File
 	PreviousTagSize uint32
+	Timestamp       uint32
 }
 
 //GenHeader FLV 生成文件头。
-func (f *FLV) genHead(flags string) {
-	var header []byte
-	header = append(header, []byte(Signature)...)  //头部固定值
-	header = append(header, Version, Flags[flags]) //Version版本。Flags。
-	header = append(header, []byte(DataOffset)...) //DataOffset
-	header = append(header, 0, 0, 0, 0)            // Last PreviousTagSize
-	f.File.Write(header)
+func (f *FLV) genHead(flags string) []byte {
+	hd := make([]byte, 13)
+	copy(hd, []byte(Signature))
+	hd[3] = Version
+	hd[4] = Flags[flags]
+	copy(hd[5:9], DataOffset)
+	// Last PreviousTagSize had put 4 byte zero
+	return hd
 }
 
 //AddTag FLV 生成写入tag
-func (f *FLV) AddTag(tagType int, timeStreamp uint32, tagData []byte) {
-
-	//Tag Numb
+func (f *FLV) AddTag(tagType byte, timeStreamp uint32, tagData []byte) {
+	f.Timestamp += timeStreamp
 	var tag Tag
 	tag.tagType = tagType
-	tag.dataSize = len(tagData)
-	tag.timeStreamp = timeStreamp
+	tag.timeStreamp = f.Timestamp
 	tag.timeStreampExtended = 0
 	tag.tagData = tagData
-	//Gen Byte
-	//log.Println(tag.genByte())
 	f.File.Write(tag.genByte())
 }
 
@@ -89,15 +85,11 @@ func (f *FLV) Close() {
 
 //GenFlv 生成新的flv
 func (f *FLV) GenFlv(name string) error {
-	// -
 	var err error
 	f.File, err = os.OpenFile(name+".flv", os.O_WRONLY|os.O_CREATE, 0644)
 	if err != nil {
 		log.Println(err)
 	}
-	//
-	f.PreviousTagSize = 0
-	// -
-	f.genHead("av")
+	f.File.Write(f.genHead("av"))
 	return nil
 }
