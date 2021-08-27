@@ -112,9 +112,6 @@ func handle(chk *Chunk, conn *Conn) {
 		if err != nil {
 			//被动关闭。
 			log.Println("handle chk.handlesMsg error:) ", err, conn.Closed)
-			// if conn.Closed {
-			// 	break
-			// }
 			break
 		}
 		switch pk.MessageTypeID {
