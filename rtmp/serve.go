@@ -2,18 +2,48 @@ package rtmp
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"net"
 	"time"
 )
 
 type Serve struct {
-	Addr      string
-	ChunkSize int
-	Timeout   time.Duration
+	Addr    string
+	Timeout time.Duration
+}
 
-	WorkPool *WorkPool
+func (srv *Serve) handle(nc net.Conn) {
+	defer nc.Close()
+
+	log.Println(nc.RemoteAddr().String(), "-> nc connected")
+
+	if err := ServeHandShake(nc); err != nil {
+		panic(err)
+	}
+
+	chk := newChunk(nc)
+	conn := newConn()
+	if err := netConnectionCommand(chk, conn); err != nil {
+		panic(err)
+	}
+
+	if err := netStreamCommand(chk, conn); err != nil {
+		panic(err)
+	}
+
+	go handle(chk, conn)
+	for {
+		if conn.Closed {
+			break
+		}
+		select {
+		case status := <-conn.CloseChan:
+			conn.Closed = status
+		case avpack := <-conn.AVPackChan:
+			log.Println(avpack.MessageTypeID)
+		}
+	}
+	log.Println(nc.RemoteAddr().String(), "-> nc closeID")
 }
 
 // 启动Tcp监听
@@ -29,31 +59,13 @@ func (srv *Serve) listen() error {
 	}
 	defer ln.Close()
 
-	srv.WorkPool = newWorkPool()
-
-	// 进行监听新连接。
 	for {
 		nc, err := ln.Accept()
 		if err != nil {
-			fmt.Print(err)
-			continue
+			return err
 		}
-
-		go func() {
-			log.Println(nc.RemoteAddr().String(), "-> nc connected")
-			defer nc.Close()
-			conn, err := newConn(srv, &nc)
-			if err != nil {
-				log.Println(err)
-				return
-			}
-			chk := newChunk(&nc)
-			err = chk.Handle(conn)
-			if err != nil {
-				log.Println(err)
-			}
-			log.Println(nc.RemoteAddr().String(), "-> nc closeing")
-		}()
+		// 开始业务流程
+		go srv.handle(nc)
 	}
 }
 

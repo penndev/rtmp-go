@@ -1,159 +1,167 @@
 package rtmp
 
 import (
-	"encoding/binary"
 	"errors"
 	"fmt"
+	"log"
 	"rtmp-go/amf"
 )
 
-// 处理消息
-func (chk *Chunk) Handle(c *Conn) error {
-	defer func() {
-		if c.IsPusher {
-			c.serve.WorkPool.Close(c.App, c.PackChan)
-		} else {
-			delete(c.serve.WorkPool.PlayList[c.App], c.PackChan)
-		}
-		// close(c.PackChan)
-		//关闭了两次chan 引起 panic
-	}()
+type Pack struct {
+	ChunkMessageHeader
+	PayLoad []byte
+}
+
+func netConnectionCommand(chk *Chunk, conn *Conn) error {
+	read := 0
 	for {
-		payload, err := chk.readMsg()
+		pk, err := chk.handlesMsg()
 		if err != nil {
 			return err
 		}
-		header := chk.rChkList[chk.csid]
-		switch header.MessageTypeID {
-		case 20:
-			item := amf.Decode(payload)
-			if stop, err := chk.netCommands(item, c); err != nil || stop {
-				return err
+		if pk.MessageTypeID != 20 {
+			return errors.New("netConnectionCommand err: cant handle type id" + fmt.Sprint(pk.MessageTypeID))
+		}
+		item := amf.Decode(pk.PayLoad)
+		switch item[0] {
+		case "connect":
+			read = 1
+			media, ok := item[2].(map[string]amf.Value)
+			if !ok {
+				return errors.New("netConnectionCommand connect err:) catn find media")
 			}
-		case 18, 15: // Metadata
-			pk := Pack{
-				Type:    header.MessageTypeID,
-				Time:    0,
-				Content: payload,
+			app, ok := media["app"].(string)
+			if !ok {
+				return errors.New("netConnectionCommand connect err:) cant find app")
 			}
-			c.onPushMate(pk)
-		case 8, 9: // Video data
-			pk := Pack{
-				Type:    header.MessageTypeID,
-				Time:    header.Timestamp,
-				Content: payload,
+			stu := conn.onConnect(app)
+			chk.setChunkSize(SetChunkSize)
+			chk.sendMsg(20, 3, respConnect(stu))
+			if !stu {
+				return errors.New("netConnectionCommand connect err:) cat conntect app " + app)
 			}
-			c.onPushAv(pk)
-		case 4:
-			item := amf.Decode(payload)
-			fmt.Println("message 4:", item)
+			chk.setWindowAcknowledgementSize(2500000)
+		case "createStream":
+			tranId, ok := item[1].(float64)
+			if !ok {
+				return errors.New("netConnectionCommand createStream err:) cant find tranid")
+			}
+			chk.sendMsg(20, 3, respCreateStream(true, int(tranId), DefaultStreamID))
+			if read == 1 {
+				read = 2
+			} else {
+				return errors.New("netConnectionCommand err:) not do connect action")
+			}
 		default:
-			return errors.New("Cont handle todo MessageTypeID:" + fmt.Sprint(header.MessageTypeID))
+			log.Println("netConnectionCommand err: cant handle command->", item[0])
+		}
+		if read == 2 {
+			break
+		}
+	}
+	return nil
+}
+
+func netStreamCommand(chk *Chunk, conn *Conn) error {
+	for {
+		pk, err := chk.handlesMsg()
+		if err != nil {
+			return err
+		}
+		if pk.MessageTypeID != 20 {
+			return errors.New("netStreamCommand err: cant handle type id" + fmt.Sprint(pk.MessageTypeID))
+		}
+		item := amf.Decode(pk.PayLoad)
+		switch item[0] {
+		case "publish":
+			streamId, ok := item[1].(float64)
+			if !ok {
+				return errors.New("netStreamCommand err: streamId error")
+			}
+			streamType, ok := item[4].(string)
+			if !ok || streamType != "live" {
+				return errors.New("netStreamCommand err: streamType error")
+			}
+			streamName, ok := item[3].(string)
+			if !ok {
+				return errors.New("netStreamCommand err: streamName error")
+			}
+			status := conn.onPublish(streamName)
+			chk.sendMsg(20, 3, respPublish(status))
+			if !status {
+				return errors.New("netStreamCommand err: streamname checkout fail")
+			}
+			chk.setStreamBegin(uint32(streamId))
+			return nil
+		case "play":
+			//
+			conn.onPlay("live")
+			log.Println("on play")
+		}
+
+	}
+}
+
+func handle(chk *Chunk, conn *Conn) {
+	defer log.Println("rtmp goroutine 回收成功")
+	for {
+		if conn.Closed {
+			break
+		}
+		pk, err := chk.handlesMsg()
+		if err != nil {
+			//被动关闭。
+			log.Println("handle chk.handlesMsg error:) ", err, conn.Closed)
+			// if conn.Closed {
+			// 	break
+			// }
+			break
+		}
+		switch pk.MessageTypeID {
+		case 8, 9, 15, 18:
+			conn.AVPackChan <- pk
+		case 20:
+			item := amf.Decode(pk.PayLoad)
+			switch item[0] {
+			case "deleteStream":
+				// 主动关闭
+				conn.onClose()
+			default:
+				log.Println("未遇到的消息(type 20)->", item[0])
+			}
+		default:
+			log.Println("未遇到的type->", pk.MessageTypeID)
 		}
 	}
 }
 
-func (chk *Chunk) netCommands(item []amf.Value, c *Conn) (bool, error) {
-	switch item[0] {
-	case "connect":
-		media, ok := item[2].(map[string]amf.Value)
-		if !ok {
-			return true, errors.New("err: connect->item[2].(map[string]amf.Value)")
-		}
-		app := media["app"].(string)
-		c.onConnect(app)
-
-		repVer := make(map[string]amf.Value)
-		repVer["fmsVer"] = "FMS/3,0,1,123"
-		repVer["capabilities"] = 31
-		repStatus := make(map[string]amf.Value)
-		repStatus["level"] = "status"
-		repStatus["code"] = "NetConnection.Connect.Success"
-		repStatus["description"] = "Connection succeeded."
-		repStatus["objectEncoding"] = 3
-		content := amf.Encode([]amf.Value{"_result", 1, repVer, repStatus})
-		chk.sendMsg(20, 3, content)
-		chk.setWindowAcknowledgementSize(2500000)
-	case "createStream":
-		if tranId, ok := item[1].(float64); ok {
-			content := amf.Encode([]amf.Value{"_result", int(tranId), nil, int(tranId)})
-			if err := chk.sendMsg(20, 3, content); err != nil {
-				return true, err
-			}
-		} else {
-			return true, errors.New("err: connect->item[2].(float64);")
-		}
-	case "play":
-		streamContent := make([]byte, 6)
-		binary.BigEndian.PutUint32(streamContent[2:], 4)
-		chk.sendMsg(4, 2, streamContent)
-
-		res := make(map[string]amf.Value)
-		res["level"] = "status"
-		res["code"] = "NetStream.Play.Start"
-		res["description"] = "Start playing"
-		resp := amf.Encode([]amf.Value{"onStatus", 0, nil, res})
-		chk.sendMsg(20, 3, resp)
-
-		c.onPlay()
-		pack := c.serve.WorkPool.MateList[c.App]
-		chk.sendMsg(20, 3, pack.Content)
-
-		packV := c.serve.WorkPool.VideoList[c.App]
-		chk.sendMsg(9, 4, packV.Content)
-
-		packA := c.serve.WorkPool.AudioList[c.App]
-		chk.sendMsg(8, 4, packA.Content)
-
-		go func() {
-			//首先初始化关键帧
-			for pck := range c.PackChan {
-				if pck.Type == 9 {
-					k := pck.Content[0]
-					if k>>4 == 1 {
-						chk.sendAv(pck.Type, 4, pck.Time, pck.Content)
-						break
-					}
-				}
-			}
-			for pck := range c.PackChan {
-				chk.sendAv(pck.Type, 4, pck.Time, pck.Content)
-			}
-			streamContent := make([]byte, 6)
-			binary.BigEndian.PutUint32(streamContent[2:], 4)
-			streamContent[1] = 1
-			chk.sendMsg(4, 2, streamContent)
-			// 关闭。
-			c.Close()
-		}()
-	case "publish":
-		res := make(map[string]amf.Value)
-		res["level"] = "status"
-		res["code"] = "NetStream.Publish.Start"
-		res["description"] = "Start publishing"
-		content := amf.Encode([]amf.Value{"onStatus", 0, nil, res})
-		chk.sendMsg(20, 3, content)
-
-		// var app, stream string
-		// var ok bool
-		// if app, ok = item[4].(string); !ok {
-		// 	return true, errors.New("cant find app name")
-		// }
-		// if stream, ok = item[3].(string); !ok {
-		// 	return true, errors.New("cant find app stream")
-		// }
-		// c.onSetPush(app, stream)
-	case "deleteStream":
-		return true, nil
-	// 处理兼容性
-	// 协议不带，但(obs vlc ffmpeg)发送了的
-	case "releaseStream":
-	case "FCPublish":
-	case "FCUnpublish":
-	case "getStreamLength":
-	//  处理兼容性匹配End
-	default:
-		return true, errors.New("netCommands handle error:" + item[0].(string))
+func respConnect(b bool) []byte {
+	if !b {
+		return amf.Encode([]amf.Value{"_error", 1, nil, nil})
 	}
-	return false, nil
+	repVer := make(map[string]amf.Value)
+	repVer["fmsVer"] = "FMS/3,0,1,123"
+	repVer["capabilities"] = 31
+	repStatus := make(map[string]amf.Value)
+	repStatus["level"] = "status"
+	repStatus["code"] = "NetConnection.Connect.Success"
+	repStatus["description"] = "Connection succeeded."
+	repStatus["objectEncoding"] = 3
+	return amf.Encode([]amf.Value{"_result", 1, repVer, repStatus})
+}
+
+func respCreateStream(b bool, transaId int, streamId int) []byte {
+	return amf.Encode([]amf.Value{"_result", transaId, nil, streamId})
+}
+
+func respPublish(b bool) []byte {
+	res := make(map[string]amf.Value)
+	res["level"] = "status"
+	if b {
+		res["code"] = "NetStream.Publish.Start"
+	} else {
+		res["code"] = "NetStream.Publish.BadName"
+	}
+	res["description"] = "Start publishing"
+	return amf.Encode([]amf.Value{"onStatus", 0, nil, res})
 }

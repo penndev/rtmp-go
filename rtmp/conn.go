@@ -1,75 +1,43 @@
 package rtmp
 
-import (
-	"fmt"
-	"net"
-)
-
-//依据rtmp对tcp进行封装
 type Conn struct {
-	// Serve 数据结构
-	// 用来访问运行时数据
-	serve *Serve
-
-	// Tcp 网络IO
-	// 进行数据通讯处理
-	rwc *net.Conn
-
 	App    string
 	Stream string
 
-	//是否有推送消息体的权限。
-	//是否是主播
-	IsPusher bool
+	// 主播端 true
+	// 播放端 false
+	Publish bool
+	Closed  bool
 
-	PackChan chan Pack
+	AVPackChan chan Pack
+	CloseChan  chan bool
 }
 
-// 握手
-func (c *Conn) handShake() error {
-	err := ServeHandShake(*c.rwc)
-	return err
-}
-
-// 关闭rtmp连接，做一些清理。
-func (c *Conn) Close() {
-	err := (*c.rwc).Close()
-	fmt.Println("close the conn->", err)
-}
-
-func (c *Conn) onPushMate(pk Pack) {
-	c.IsPusher = true
-	c.serve.WorkPool.Publish(c.App, c.PackChan, pk)
-}
-
-func (c *Conn) onPushAv(pk Pack) {
-	c.PackChan <- pk
-}
-
-// func (c *Conn) onSetPush(app string, stream string) {
-// 	c.App = app
-// }
-
-func (c *Conn) onConnect(app string) {
+// 根据返回值处理连接是否继续
+// return true 继续下一步
+func (c *Conn) onConnect(app string) bool {
 	c.App = app
+	return true
 }
 
-// func (c *Conn) onPushStop() {
-// 	c.serve.WorkPool.Close(c.App, c.PackChan)
-// }
-
-func (c *Conn) onPlay() {
-	c.serve.WorkPool.Play(c.App, c.PackChan)
+func (c *Conn) onPublish(stream string) bool {
+	//验证密钥。
+	c.Publish = true
+	return true
 }
 
-func newConn(srv *Serve, nc *net.Conn) (*Conn, error) {
-	c := &Conn{
-		serve:    srv,
-		rwc:      nc,
-		IsPusher: false,
-		PackChan: make(chan Pack),
+func (c *Conn) onPlay(stream string) bool {
+	return true
+}
+
+func (c *Conn) onClose() {
+	c.Closed = true
+	c.CloseChan <- true
+}
+
+func newConn() *Conn {
+	return &Conn{
+		AVPackChan: make(chan Pack),
+		CloseChan:  make(chan bool),
 	}
-
-	err := c.handShake()
-	return c, err
 }

@@ -28,6 +28,8 @@ const ChunkMessageID = 3
 // caid value 4 默认用作新的媒体传输流使用
 const ChunkAVPackID = 4
 
+const DefaultStreamID = 5
+
 // rtmp message 消息头信息
 // 因为需要存储多路复用所以不包含消息体 payload.
 // 阅读官方详细说明  5.3.1.2.5. Common Header Fields  15 page
@@ -63,7 +65,7 @@ type Chunk struct {
 //从net.conn 读取数据，阻塞型函数
 func (chk *Chunk) Read(l int) ([]byte, error) {
 	buf := make([]byte, l)
-	l, err := io.ReadFull(chk.r, buf)
+	_, err := io.ReadFull(chk.r, buf)
 	return buf, err
 }
 
@@ -250,38 +252,39 @@ func (chk *Chunk) readMsg() ([]byte, error) {
 // 返回消息体
 // 对底层控制协议进行处理不直接返回。
 // 直接返回消息体
-func (chk *Chunk) handlesMsg() ([]byte, error) {
+func (chk *Chunk) handlesMsg() (Pack, error) {
 	//读取原始数据
 	payload, err := chk.readMsg()
 	if err != nil {
-		return nil, err
+		return Pack{}, err
 	}
 	// 协议控制消息。
 	switch int(chk.readChunkList[chk.csid].MessageTypeID) {
-	case 1: //Set Chunk Size (1) //设置chunk大小
+	case 1:
 		chk.readChunkSize = binary.BigEndian.Uint32(payload)
 	case 2:
-		// Abort Message (2) //中止消息。
-		// log.Println("Abort Message (2)")
+		log.Println("Abort Message (2)")
 	case 3:
 		// Acknowledgement (3) // 收到字节数对照
-		// 每当收到Window Acknowledgement Size字节数据则发送ack确认消息。
-		// log.Println("Acknowledgement (3)", payload)
+		log.Println("Acknowledgement (3)", payload)
 	case 5:
 		// Window Acknowledgement Size (5) // 发送数据对照
-		// log.Println("Window Acknowledgement Size (5)")
+		log.Println("Window Acknowledgement Size (5)")
 	case 6:
 		// Set Peer Bandwidth (6) //限制传送速率
-		// log.Println("Set Peer Bandwidth (6)")
+		log.Println("Set Peer Bandwidth (6)")
 	default:
-		return payload, nil
+		var pk Pack
+		pk.PayLoad = payload
+		pk.ChunkMessageHeader = *chk.readChunkList[chk.csid]
+		return pk, nil
 	}
-	return chk.readMsg()
+	return chk.handlesMsg()
 }
 
 func (chk *Chunk) sendMsg(MessageTypeID byte, csid uint32, Payload []byte) error {
 	if csid < 2 {
-		return errors.New("csid cant < 2, 0 and 1 cant used")
+		return errors.New("sendMsg err:) scsid cant < 2, 0 and 1 cant used")
 	}
 
 	writefmt := byte(1)
@@ -328,21 +331,28 @@ func (chk *Chunk) setWindowAcknowledgementSize(size uint32) {
 }
 
 // no message is larger than 16777215 bytes.
-func (chk *Chunk) setChunkSize(size uint32) {
-	// if size > 16777215 {
-	// 报错 无效
-	// }
+func (chk *Chunk) setChunkSize(size uint32) error {
+	if size > 16777215 {
+		return errors.New("setChunkSize err:) set chunk size cant > 16777215")
+	}
 	sizeByte := make([]byte, 4)
 	binary.BigEndian.PutUint32(sizeByte, size)
 	chk.sendMsg(1, 2, sizeByte)
 	chk.writeChunkSize = size
+	return nil
+}
+
+func (chk *Chunk) setStreamBegin(streamID uint32) error {
+	streamContent := make([]byte, 6)
+	binary.BigEndian.PutUint32(streamContent[2:], streamID)
+	return chk.sendMsg(4, ChunkControlID, streamContent)
 }
 
 // 创建 Chunk Stream
-func newChunk(c *net.Conn) *Chunk {
+func newChunk(c net.Conn) *Chunk {
 	return &Chunk{
-		r:              bufio.NewReader(*c),
-		w:              bufio.NewWriter(*c),
+		r:              bufio.NewReader(c),
+		w:              bufio.NewWriter(c),
 		readChunkSize:  uint32(DefaultChunkSize),
 		writeChunkSize: uint32(DefaultChunkSize),
 		readChunkList:  make(map[uint32]*ChunkMessageHeader),
