@@ -273,6 +273,8 @@ func (chk *Chunk) handlesMsg() (Pack, error) {
 	case 6:
 		// Set Peer Bandwidth (6) //限制传送速率
 		log.Println("Set Peer Bandwidth (6)")
+	case 4:
+		log.Println("user controle message 4")
 	default:
 		var pk Pack
 		pk.PayLoad = payload

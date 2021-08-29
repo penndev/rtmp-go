@@ -94,9 +94,16 @@ func netStreamCommand(chk *Chunk, conn *Conn) error {
 			chk.setStreamBegin(uint32(streamId))
 			return nil
 		case "play":
-			//
-			conn.onPlay("live")
-			log.Println("on play")
+			streamName, ok := item[3].(string)
+			if !ok {
+				return errors.New("netStreamCommand play err: streamName error")
+			}
+			status := conn.onPlay(streamName)
+			chk.sendMsg(20, 3, respPlay(status))
+			if !status {
+				return errors.New("netStreamCommand play err: streamname checkout fail")
+			}
+			return nil
 		}
 
 	}
@@ -160,5 +167,17 @@ func respPublish(b bool) []byte {
 		res["code"] = "NetStream.Publish.BadName"
 	}
 	res["description"] = "Start publishing"
+	return amf.Encode([]amf.Value{"onStatus", 0, nil, res})
+}
+
+func respPlay(b bool) []byte {
+	res := make(map[string]amf.Value)
+	res["level"] = "status"
+	if b {
+		res["code"] = "NetStream.Play.Start"
+	} else {
+		res["code"] = "NetStream.Play.Failed"
+	}
+	res["description"] = "Start playing"
 	return amf.Encode([]amf.Value{"onStatus", 0, nil, res})
 }
