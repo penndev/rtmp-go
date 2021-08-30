@@ -350,6 +350,13 @@ func (chk *Chunk) setStreamBegin(streamID uint32) error {
 	return chk.sendMsg(4, ChunkControlID, streamContent)
 }
 
+func (chk *Chunk) setStreamEof(streamID uint32) error {
+	streamContent := make([]byte, 6)
+	binary.BigEndian.PutUint16(streamContent[:2], 1)
+	binary.BigEndian.PutUint32(streamContent[2:], streamID)
+	return chk.sendMsg(4, ChunkControlID, streamContent)
+}
+
 // 创建 Chunk Stream
 func newChunk(c net.Conn) *Chunk {
 	return &Chunk{

@@ -1,39 +1,40 @@
 package rtmp
 
-// // chan 传输内容
-// type Pack struct {
-// 	Type    byte
-// 	Time    uint32
-// 	Content []byte
-// }
+// 存储视频元数据
+type metaPack struct {
+	meta  []byte
+	audit []byte
+	video []byte
+}
 
-// type WorkPool struct {
-// 	PlayList  map[string](map[chan Pack]bool)
-// 	MateList  map[string]Pack
-// 	VideoList map[string]Pack
-// 	AudioList map[string]Pack
-// }
+// 播放端列表
+type stream struct {
+	list map[chan Pack]bool
+	meta map[string]metaPack
+}
 
-// func (wp *WorkPool) Close(room string, push chan Pack) {
-// 	for py := range wp.PlayList[room] {
-// 		close(py)
-// 	}
-// 	delete(wp.PlayList, room)
-// 	delete(wp.MateList, room)
-// 	delete(wp.VideoList, room)
-// 	delete(wp.AudioList, room)
-// }
+type App struct {
+	Gloab map[chan Pack]bool
+	List  map[string]stream
+}
 
-// func (wp *WorkPool) Publish(room string, push chan Pack, pk Pack) {
+func (a *App) addGloab(pk chan Pack) {
+	a.Gloab[pk] = true
+}
 
-// 	item := amf.Decode(pk.Content)
-// 	resp := []amf.Value{"onMetaData", item[2]}
-
-// 	wp.MateList[room] = Pack{
-// 		Type:    pk.Type,
-// 		Time:    pk.Time,
-// 		Content: amf.Encode(resp),
-// 	}
+func (a *App) addPublish(appName string, streamName string) {
+	app, ok := a.List[appName]
+	if !ok {
+		a.List[appName] = stream{
+			list: make(map[chan Pack]bool),
+			meta: make(map[string]metaPack),
+		}
+		app = a.List[appName]
+	}
+	for pk, bl := range a.Gloab {
+		app.list[pk] = bl
+	}
+}
 
 // 	s := fmt.Sprint(time.Now().Unix())
 // 	var flv av.FLV
@@ -65,21 +66,4 @@ package rtmp
 // 		}
 // 		defer flv.Close()
 // 	}()
-// }
-
-// func (wp *WorkPool) Play(room string, play chan Pack) {
-// 	if _, ok := wp.PlayList[room]; !ok {
-// 		wp.PlayList[room] = make(map[chan Pack]bool)
-// 	}
-// 	wp.PlayList[room][play] = true
-// }
-
-// func newWorkPool() *WorkPool {
-// 	wp := &WorkPool{
-// 		PlayList:  make(map[string]map[chan Pack]bool),
-// 		MateList:  make(map[string]Pack),
-// 		VideoList: make(map[string]Pack),
-// 		AudioList: make(map[string]Pack),
-// 	}
-// 	return wp
 // }

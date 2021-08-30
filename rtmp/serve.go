@@ -16,22 +16,72 @@ func (srv *Serve) handle(nc net.Conn) {
 	defer nc.Close()
 
 	log.Println(nc.RemoteAddr().String(), "-> nc connected")
-
+	// 握手
 	if err := ServeHandShake(nc); err != nil {
 		panic(err)
 	}
 
 	chk := newChunk(nc)
 	conn := newConn()
+	// Connection
 	if err := netConnectionCommand(chk, conn); err != nil {
 		panic(err)
 	}
-
+	// 初始化流
 	if err := netStreamCommand(chk, conn); err != nil {
 		panic(err)
 	}
-
+	// 处理client消息。
 	go handle(chk, conn)
+
+	var client func(Pack)
+	callback := func(pk Pack, client func(Pack)) {
+		client(pk)
+	}
+	// 第 1 bit 设置 onMetaData
+	// 第 2 bit 设置 Audit
+	// 第 3 bit 设置 Video
+	//0000 0111
+	readyIng := 0
+
+	//处理逻辑
+	if conn.IsPublish {
+		log.Println("publish")
+		client = func(pk Pack) {
+			if readyIng < 7 {
+				if pk.MessageTypeID == 15 {
+					readyIng |= 1 // onMetaData
+					log.Println("pk.MessageTypeID=15")
+					return
+				}
+				if pk.MessageTypeID == 18 {
+					readyIng |= 1 // onMetaData
+					log.Println(readyIng)
+					return
+				}
+				if pk.MessageTypeID == 8 {
+
+					readyIng |= 2 // onAuditInit
+					log.Println(readyIng)
+					return
+				}
+				if pk.MessageTypeID == 9 {
+					readyIng |= 4 // onVideoInit
+					log.Println(readyIng)
+					return
+				}
+				log.Println(pk.ChunkMessageHeader)
+			}
+			conn.Closed = true
+			log.Println(pk.MessageTypeID)
+		}
+	} else {
+		log.Println("play")
+		client = func(pk Pack) {
+			log.Println(pk.MessageTypeID)
+		}
+	}
+
 	for {
 		if conn.Closed {
 			break
@@ -40,9 +90,11 @@ func (srv *Serve) handle(nc net.Conn) {
 		case status := <-conn.CloseChan:
 			conn.Closed = status
 		case avpack := <-conn.AVPackChan:
-			log.Println(avpack.MessageTypeID)
+			callback(avpack, client)
 		}
 	}
+	// publish无效
+	chk.setStreamEof(DefaultStreamID)
 	log.Println(nc.RemoteAddr().String(), "-> nc closeID")
 }
 

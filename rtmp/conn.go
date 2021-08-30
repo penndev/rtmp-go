@@ -6,8 +6,8 @@ type Conn struct {
 
 	// 主播端 true
 	// 播放端 false
-	Publish bool
-	Closed  bool
+	IsPublish bool
+	Closed    bool
 
 	AVPackChan chan Pack
 	CloseChan  chan bool
@@ -22,7 +22,7 @@ func (c *Conn) onConnect(app string) bool {
 
 func (c *Conn) onPublish(stream string) bool {
 	//验证密钥。
-	c.Publish = true
+	c.IsPublish = true
 	return true
 }
 
