@@ -10,6 +10,7 @@ import (
 type Serve struct {
 	Addr    string
 	Timeout time.Duration
+	App     *App
 }
 
 func (srv *Serve) handle(nc net.Conn) {
@@ -33,68 +34,73 @@ func (srv *Serve) handle(nc net.Conn) {
 	}
 	// 处理client消息。
 	go handle(chk, conn)
-
-	var client func(Pack)
-	callback := func(pk Pack, client func(Pack)) {
-		client(pk)
+	callClose := func(c func()) {
+		c()
 	}
-	// 第 1 bit 设置 onMetaData
-	// 第 2 bit 设置 Audit
-	// 第 3 bit 设置 Video
-	//0000 0111
-	readyIng := 0
-
+	callConnect := func(pk Pack, c func(Pack)) {
+		c(pk)
+	}
+	var client func(Pack)
+	var close func()
+	app := srv.App
 	//处理逻辑
 	if conn.IsPublish {
-		log.Println("publish")
+		stream := app.addPublish(conn.App, conn.Stream)
+		readyIng := 0
 		client = func(pk Pack) {
 			if readyIng < 7 {
-				if pk.MessageTypeID == 15 {
-					readyIng |= 1 // onMetaData
-					log.Println("pk.MessageTypeID=15")
-					return
-				}
-				if pk.MessageTypeID == 18 {
-					readyIng |= 1 // onMetaData
-					log.Println(readyIng)
-					return
-				}
-				if pk.MessageTypeID == 8 {
-
-					readyIng |= 2 // onAuditInit
-					log.Println(readyIng)
-					return
-				}
-				if pk.MessageTypeID == 9 {
-					readyIng |= 4 // onVideoInit
-					log.Println(readyIng)
-					return
-				}
-				log.Println(pk.ChunkMessageHeader)
+				stream.setMeta(pk, &readyIng)
+				return
 			}
-			conn.Closed = true
-			log.Println(pk.MessageTypeID)
+			stream.setPack(pk)
+		}
+		close = func() {
+			app.delPublish(conn.App, conn.Stream)
 		}
 	} else {
-		log.Println("play")
+		// 初始化流不存在。
+		if ok := app.addPlay(conn.App, conn.Stream, conn.AVPackChan); !ok {
+			log.Println("Play stream not found:", conn.App, conn.Stream)
+			conn.Closed = true
+		}
+		// =======================================================
+		mt := app.getMeta(conn.App, conn.Stream)
+		pk := Pack{
+			PayLoad: mt.meta,
+		}
+		pk.MessageTypeID = 18
+		chk.sendPack(DefaultStreamID, pk)
+		//--
+		pk = Pack{
+			PayLoad: mt.video,
+		}
+		pk.MessageTypeID = 9
+		chk.sendPack(DefaultStreamID, pk)
+		//--
+		pk = Pack{
+			PayLoad: mt.audit,
+		}
+		pk.MessageTypeID = 8
+		chk.sendPack(DefaultStreamID, pk)
+		// =======================================================
 		client = func(pk Pack) {
-			log.Println(pk.MessageTypeID)
+			chk.sendPack(DefaultStreamID, pk)
+			// log.Println(pk.MessageTypeID)
+		}
+		close = func() {
+			chk.setStreamEof(DefaultStreamID)
+			app.delPlay(conn.App, conn.Stream, conn.AVPackChan)
 		}
 	}
 
-	for {
-		if conn.Closed {
-			break
-		}
-		select {
-		case status := <-conn.CloseChan:
-			conn.Closed = status
-		case avpack := <-conn.AVPackChan:
-			callback(avpack, client)
+	//处理message.
+	if !conn.Closed {
+		for avpack := range conn.AVPackChan {
+			callConnect(avpack, client)
 		}
 	}
-	// publish无效
-	chk.setStreamEof(DefaultStreamID)
+
+	callClose(close)
 	log.Println(nc.RemoteAddr().String(), "-> nc closeID")
 }
 
@@ -127,6 +133,7 @@ func NewRtmp() error {
 	s := &Serve{
 		Addr:    ":1935",
 		Timeout: 10 * time.Second,
+		App:     newApp(),
 	}
 
 	if err := s.listen(); err != nil {

@@ -1,5 +1,10 @@
 package rtmp
 
+import (
+	"log"
+	"net/url"
+)
+
 type Conn struct {
 	App    string
 	Stream string
@@ -22,17 +27,19 @@ func (c *Conn) onConnect(app string) bool {
 
 func (c *Conn) onPublish(stream string) bool {
 	//验证密钥。
+	str, _ := url.Parse(stream)
+	c.Stream = str.Path
 	c.IsPublish = true
 	return true
 }
 
 func (c *Conn) onPlay(stream string) bool {
+	c.Stream = stream
 	return true
 }
 
 func (c *Conn) onClose() {
-	c.Closed = true
-	c.CloseChan <- true
+	log.Println("closed.....")
 }
 
 func newConn() *Conn {

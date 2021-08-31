@@ -52,6 +52,8 @@ func netConnectionCommand(chk *Chunk, conn *Conn) error {
 			} else {
 				return errors.New("netConnectionCommand err:) not do connect action")
 			}
+		case "releaseStream":
+		case "FCPublish":
 		default:
 			log.Println("netConnectionCommand err: cant handle command->", item[0])
 		}
@@ -110,26 +112,34 @@ func netStreamCommand(chk *Chunk, conn *Conn) error {
 }
 
 func handle(chk *Chunk, conn *Conn) {
-	defer log.Println("rtmp goroutine 回收成功")
+	log.Println("handle - - - - - -> 创建完成")
+	defer log.Println("handle - - - - - -> 回收完成")
 	for {
-		if conn.Closed {
-			break
-		}
 		pk, err := chk.handlesMsg()
 		if err != nil {
-			//被动关闭。
-			log.Println("handle chk.handlesMsg error:) ", err, conn.Closed)
-			break
+			//true  我方关闭了tcp
+			//false 客户端关闭了tcp
+			if !conn.Closed {
+				conn.onClose()
+			}
+			return
 		}
 		switch pk.MessageTypeID {
 		case 8, 9, 15, 18:
+			if conn.Closed {
+				return
+			}
 			conn.AVPackChan <- pk
 		case 20:
 			item := amf.Decode(pk.PayLoad)
 			switch item[0] {
+			case "FCUnpublish":
 			case "deleteStream":
 				// 主动关闭
+				conn.Closed = true
+				close(conn.AVPackChan)
 				conn.onClose()
+				return
 			default:
 				log.Println("未遇到的消息(type 20)->", item[0])
 			}

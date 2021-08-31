@@ -325,6 +325,49 @@ func (chk *Chunk) sendMsg(MessageTypeID byte, csid uint32, Payload []byte) error
 	return nil
 }
 
+func (chk *Chunk) sendPack(csid uint32, pk Pack) error {
+	if csid < 2 {
+		return errors.New("sendMsg err:) scsid cant < 2, 0 and 1 cant used")
+	}
+
+	writefmt := byte(1)
+	if _, ok := chk.writeChunkList[csid]; !ok {
+		chk.writeChunkList[csid] = &ChunkMessageHeader{}
+		writefmt = 0
+	}
+	payloadLen := uint32(len(pk.PayLoad))
+	chk.writeChunkList[csid].MessageTypeID = pk.MessageTypeID
+	chk.writeChunkList[csid].MessageLength = payloadLen
+	chk.writeChunkList[csid].Timestamp = pk.Timestamp
+	Payload := pk.PayLoad
+	//制作基础头
+	writed := uint32(0)
+	for {
+		//本次需要发送多少字节。
+		currenLen := chk.writeChunkSize
+		//剩余多少字节数据需要发送
+		remaining := payloadLen - writed
+		if remaining < currenLen {
+			currenLen = remaining
+		}
+		//是否第一次发送
+		if writed == 0 {
+			chk.Write(chk.writeBasicHeader(writefmt, csid))
+			chk.Write(chk.rspMsgHeader(writefmt, csid))
+		} else {
+			chk.Write(chk.writeBasicHeader(3, csid))
+		}
+		chk.Write(Payload[writed:(writed + currenLen)])
+		chk.w.Flush()
+		//数据发送完成
+		writed += currenLen
+		if writed >= payloadLen {
+			break
+		}
+	}
+	return nil
+}
+
 // - 底层协议控制传送速率
 func (chk *Chunk) setWindowAcknowledgementSize(size uint32) {
 	sizeByte := make([]byte, 4)
