@@ -12,6 +12,14 @@ type Pack struct {
 	PayLoad []byte
 }
 
+func callConnect(pk Pack, client func(Pack)) {
+	client(pk)
+}
+
+func callClose(close func()) {
+	close()
+}
+
 func netConnectionCommand(chk *Chunk, conn *Conn) error {
 	read := 0
 	for {
@@ -111,22 +119,79 @@ func netStreamCommand(chk *Chunk, conn *Conn) error {
 	}
 }
 
+//阻塞处理 AVPackChan 收到的消息。
+func netHandleCommand(chk *Chunk, conn *Conn, app *App) error {
+	go handle(chk, conn)
+	var client func(Pack)
+	var close func()
+	if conn.IsPublish {
+		stream := app.addPublish(conn.App, conn.Stream)
+		readyIng := 0
+		client = func(pk Pack) {
+			if readyIng < 7 { //初始化视频关键(解码)信息。
+				stream.setMeta(pk, &readyIng)
+				return
+			}
+			stream.setPack(pk)
+		}
+		close = func() {
+			// 这里不设置状态。
+			app.delPublish(conn.App, conn.Stream)
+		}
+	} else {
+		stream, ok := app.addPlay(conn.App, conn.Stream, conn.AVPackChan) // 初始化流不存在。
+		if !ok {
+			log.Println("Play stream not found:", conn.App, conn.Stream)
+			conn.IsStoped = true //禁止下面阻塞读
+		}
+		readyIng := 0
+		client = func(pk Pack) {
+			// 必须初始化关键帧。====
+			if readyIng == 0 { //初始化视频关键(解码)信息。
+				stream.getMeta(chk)
+				readyIng = 1
+			}
+			chk.sendPack(DefaultStreamID, pk)
+		}
+		close = func() {
+			chk.setStreamEof(DefaultStreamID)
+			app.delPlay(conn.App, conn.Stream, conn.AVPackChan)
+			if !conn.IsStoped { //如果是推送端关闭的。
+				conn.IsStoped = true // 防止read协程再次close PackChan。
+			}
+		}
+	}
+	// 如果流已经被停止了
+	// 或者客户端直接断开连接了
+	// 则直接停止当前线程。
+	if !conn.IsStoped {
+		for avpack := range conn.AVPackChan {
+			callConnect(avpack, client)
+		}
+	}
+	callClose(close)
+	return nil
+}
+
+// 阻塞读chunk消息。
 func handle(chk *Chunk, conn *Conn) {
-	log.Println("handle - - - - - -> 创建完成")
-	defer log.Println("handle - - - - - -> 回收完成")
+	log.Println("创建线程handle")
+	defer log.Println("回收线程handle")
 	for {
 		pk, err := chk.handlesMsg()
 		if err != nil {
-			//true  我方关闭了tcp
-			//false 客户端关闭了tcp
-			if !conn.Closed {
-				conn.onClose()
+			//如果是客户端主动关闭,标记状态，并通知chan对端。
+			if !conn.IsStoped {
+				conn.IsStoped = true
+				// 如果是推送端关闭了
+				close(conn.AVPackChan)
 			}
 			return
 		}
 		switch pk.MessageTypeID {
 		case 8, 9, 15, 18:
-			if conn.Closed {
+			//不允许向已关闭的chan传输数据。
+			if conn.IsStoped {
 				return
 			}
 			conn.AVPackChan <- pk
@@ -136,7 +201,7 @@ func handle(chk *Chunk, conn *Conn) {
 			case "FCUnpublish":
 			case "deleteStream":
 				// 主动关闭
-				conn.Closed = true
+				conn.IsStoped = true
 				close(conn.AVPackChan)
 				conn.onClose()
 				return
@@ -147,47 +212,4 @@ func handle(chk *Chunk, conn *Conn) {
 			log.Println("未遇到的type->", pk.MessageTypeID)
 		}
 	}
-}
-
-func respConnect(b bool) []byte {
-	if !b {
-		return amf.Encode([]amf.Value{"_error", 1, nil, nil})
-	}
-	repVer := make(map[string]amf.Value)
-	repVer["fmsVer"] = "FMS/3,0,1,123"
-	repVer["capabilities"] = 31
-	repStatus := make(map[string]amf.Value)
-	repStatus["level"] = "status"
-	repStatus["code"] = "NetConnection.Connect.Success"
-	repStatus["description"] = "Connection succeeded."
-	repStatus["objectEncoding"] = 3
-	return amf.Encode([]amf.Value{"_result", 1, repVer, repStatus})
-}
-
-func respCreateStream(b bool, transaId int, streamId int) []byte {
-	return amf.Encode([]amf.Value{"_result", transaId, nil, streamId})
-}
-
-func respPublish(b bool) []byte {
-	res := make(map[string]amf.Value)
-	res["level"] = "status"
-	if b {
-		res["code"] = "NetStream.Publish.Start"
-	} else {
-		res["code"] = "NetStream.Publish.BadName"
-	}
-	res["description"] = "Start publishing"
-	return amf.Encode([]amf.Value{"onStatus", 0, nil, res})
-}
-
-func respPlay(b bool) []byte {
-	res := make(map[string]amf.Value)
-	res["level"] = "status"
-	if b {
-		res["code"] = "NetStream.Play.Start"
-	} else {
-		res["code"] = "NetStream.Play.Failed"
-	}
-	res["description"] = "Start playing"
-	return amf.Encode([]amf.Value{"onStatus", 0, nil, res})
 }

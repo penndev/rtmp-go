@@ -1,7 +1,6 @@
 package rtmp
 
 import (
-	"log"
 	"net/url"
 )
 
@@ -12,7 +11,7 @@ type Conn struct {
 	// 主播端 true
 	// 播放端 false
 	IsPublish bool
-	Closed    bool
+	IsStoped  bool
 
 	AVPackChan chan Pack
 	CloseChan  chan bool
@@ -39,7 +38,6 @@ func (c *Conn) onPlay(stream string) bool {
 }
 
 func (c *Conn) onClose() {
-	log.Println("closed.....")
 }
 
 func newConn() *Conn {

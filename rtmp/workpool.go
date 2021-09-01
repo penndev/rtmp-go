@@ -50,6 +50,26 @@ func (s *stream) setPack(pk Pack) {
 	}
 }
 
+func (s *stream) getMeta(chk *Chunk) {
+	pKmeta := Pack{
+		PayLoad: s.meta.meta,
+	}
+	pKmeta.MessageTypeID = 18
+	chk.sendPack(DefaultStreamID, pKmeta)
+
+	pkVideo := Pack{
+		PayLoad: s.meta.video,
+	}
+	pkVideo.MessageTypeID = 9
+	chk.sendPack(DefaultStreamID, pkVideo)
+
+	pkAudit := Pack{
+		PayLoad: s.meta.audit,
+	}
+	pkAudit.MessageTypeID = 8
+	chk.sendPack(DefaultStreamID, pkAudit)
+}
+
 type listener func(string) chan Pack
 
 type App struct {
@@ -79,23 +99,14 @@ func (a *App) addPublish(appName string, streamName string) *stream {
 	return a.List[pool]
 }
 
-func (a *App) addPlay(appName string, streamName string, client chan Pack) bool {
+func (a *App) addPlay(appName string, streamName string, client chan Pack) (*stream, bool) {
 	pool := appName + "_" + streamName
 	app, ok := a.List[pool]
 	if !ok {
-		return false
+		return &stream{}, false
 	}
 	app.client[client] = true
-	return true
-}
-
-func (a *App) getMeta(appName string, streamName string) metaPack {
-	pool := appName + "_" + streamName
-	app, ok := a.List[pool]
-	if !ok {
-		return metaPack{}
-	}
-	return app.meta
+	return app, true
 }
 
 func (a *App) delPublish(appName string, streamName string) {

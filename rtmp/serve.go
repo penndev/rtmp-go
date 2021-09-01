@@ -15,92 +15,28 @@ type Serve struct {
 
 func (srv *Serve) handle(nc net.Conn) {
 	defer nc.Close()
-
 	log.Println(nc.RemoteAddr().String(), "-> nc connected")
-	// 握手
+
+	// 处理握手相关
 	if err := ServeHandShake(nc); err != nil {
 		panic(err)
 	}
 
 	chk := newChunk(nc)
 	conn := newConn()
-	// Connection
+
+	// 处理连接流
 	if err := netConnectionCommand(chk, conn); err != nil {
 		panic(err)
 	}
-	// 初始化流
+	// 处理初始化流
 	if err := netStreamCommand(chk, conn); err != nil {
 		panic(err)
 	}
-	// 处理client消息。
-	go handle(chk, conn)
-	callClose := func(c func()) {
-		c()
+	// 主流程
+	if err := netHandleCommand(chk, conn, srv.App); err != nil {
+		panic(err)
 	}
-	callConnect := func(pk Pack, c func(Pack)) {
-		c(pk)
-	}
-	var client func(Pack)
-	var close func()
-	app := srv.App
-	//处理逻辑
-	if conn.IsPublish {
-		stream := app.addPublish(conn.App, conn.Stream)
-		readyIng := 0
-		client = func(pk Pack) {
-			if readyIng < 7 {
-				stream.setMeta(pk, &readyIng)
-				return
-			}
-			stream.setPack(pk)
-		}
-		close = func() {
-			app.delPublish(conn.App, conn.Stream)
-		}
-	} else {
-		// 初始化流不存在。
-		if ok := app.addPlay(conn.App, conn.Stream, conn.AVPackChan); !ok {
-			log.Println("Play stream not found:", conn.App, conn.Stream)
-			conn.Closed = true
-		}
-		// =======================================================
-		mt := app.getMeta(conn.App, conn.Stream)
-		pk := Pack{
-			PayLoad: mt.meta,
-		}
-		pk.MessageTypeID = 18
-		chk.sendPack(DefaultStreamID, pk)
-		//--
-		pk = Pack{
-			PayLoad: mt.video,
-		}
-		pk.MessageTypeID = 9
-		chk.sendPack(DefaultStreamID, pk)
-		//--
-		pk = Pack{
-			PayLoad: mt.audit,
-		}
-		pk.MessageTypeID = 8
-		chk.sendPack(DefaultStreamID, pk)
-		// =======================================================
-		client = func(pk Pack) {
-			chk.sendPack(DefaultStreamID, pk)
-			// log.Println(pk.MessageTypeID)
-		}
-		close = func() {
-			chk.setStreamEof(DefaultStreamID)
-			app.delPlay(conn.App, conn.Stream, conn.AVPackChan)
-		}
-	}
-
-	//处理message.
-	if !conn.Closed {
-		for avpack := range conn.AVPackChan {
-			callConnect(avpack, client)
-		}
-	}
-
-	callClose(close)
 	log.Println(nc.RemoteAddr().String(), "-> nc closeID")
 }
 

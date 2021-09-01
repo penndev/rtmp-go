@@ -263,18 +263,18 @@ func (chk *Chunk) handlesMsg() (Pack, error) {
 	case 1:
 		chk.readChunkSize = binary.BigEndian.Uint32(payload)
 	case 2:
-		log.Println("Abort Message (2)")
+		//log.Println("Abort Message (2)")
 	case 3:
 		// Acknowledgement (3) // 收到字节数对照
-		log.Println("Acknowledgement (3)", payload)
+		//log.Println("Acknowledgement (3)", payload)
 	case 5:
 		// Window Acknowledgement Size (5) // 发送数据对照
-		log.Println("Window Acknowledgement Size (5)")
+		//log.Println("Window Acknowledgement Size (5)")
 	case 6:
 		// Set Peer Bandwidth (6) //限制传送速率
-		log.Println("Set Peer Bandwidth (6)")
+		//log.Println("Set Peer Bandwidth (6)")
 	case 4:
-		log.Println("user controle message 4")
+		//log.Println("user controle message 4")
 	default:
 		var pk Pack
 		pk.PayLoad = payload
