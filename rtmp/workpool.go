@@ -128,7 +128,6 @@ func (a *App) delPlay(appName string, streamName string, client chan Pack) {
 		return
 	}
 	delete(app.client, client)
-	close(client)
 }
 
 func newApp() *App {
