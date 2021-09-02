@@ -25,6 +25,12 @@ Amf数据格式文档 [Amf data structure](https://www.adobe.com/content/dam/aco
 
 Rtmp协议详解（握手部分文档缺失【存在握手验证的情况】） [Rtmp specification](https://www.adobe.com/content/dam/acom/en/devnet/rtmp/pdf/rtmp_specification_1.0.pdf)
 
+FLV 视频格式的封装
+
+MPEG2-TS 视频格式封装
+
+HTTP Live Streaming (HLS) 切片封装
+
 ## License
 
 rtmp-go 为本人[pennilessfor@gmail.com](mailto:pennilessfor@gmail.com)学习研究制作，不存在任何限制。希望可以和更多伙伴互相学习交流
