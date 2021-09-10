@@ -80,3 +80,8 @@ func (tsh *tsPacketHeader) genTsPacketHeader() []byte {
 	log.Println(hd)
 	return hd
 }
+
+func genPAT() []byte {
+
+	return nil
+}
