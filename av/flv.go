@@ -55,6 +55,7 @@ type FLV struct {
 	PreviousTagSize uint32
 	Timestamp       uint32
 
+	testaac  *os.File
 	testh264 *os.File
 }
 
@@ -70,6 +71,7 @@ func (f *FLV) genHead(flags string) []byte {
 }
 
 var sps = false
+var aac = false
 
 //AddTag FLV 生成写入tag
 func (f *FLV) AddTag(tagType byte, timeStreamp uint32, tagData []byte) {
@@ -80,6 +82,29 @@ func (f *FLV) AddTag(tagType byte, timeStreamp uint32, tagData []byte) {
 	tag.timeStreampExtended = 0
 	tag.tagData = tagData
 	f.File.Write(tag.genByte())
+
+	if tagType == 8 {
+		if !aac {
+			aac = true
+			return
+		}
+
+		adtsh := []byte{0xff, 0xf1, 0x4c, 0x80}
+		f.testaac.Write(adtsh)
+		tmp := make([]byte, 2)
+		tmpnull := uint16(len(tagData) + 5)
+		tmpnull = tmpnull << 5
+		tmpnull = tmpnull | 0x1f
+		binary.BigEndian.PutUint16(tmp, tmpnull)
+		f.testaac.Write(tmp)
+
+		f.testaac.Write([]byte{0xfc})
+
+		adts := tagData[2:]
+		f.testaac.Write(adts)
+
+	}
+
 	if tagType == 9 {
 		if !sps {
 			sps = true
@@ -117,6 +142,11 @@ func (f *FLV) GenFlv(name string) error {
 		log.Println(err)
 	}
 	f.testh264, err = os.OpenFile(name+".h264", os.O_WRONLY|os.O_CREATE, 0644)
+	if err != nil {
+		log.Println(err)
+	}
+
+	f.testaac, err = os.OpenFile(name+".aac", os.O_WRONLY|os.O_CREATE, 0644)
 	if err != nil {
 		log.Println(err)
 	}
