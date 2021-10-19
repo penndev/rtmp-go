@@ -1,10 +1,7 @@
 # rtmp-go
 
-实现了rtmp协议，可进行视频rtmp推流,rtmp播放,存储直播flv流视频功能
+实现了rtmp协议，可进行视频rtmp推流,rtmp播放,http-flv播放, 存储直播flv流视频功能
 
-目前新的直播技术为 https://webrtc.org/ 面向更好的未来(rtmp可进行学习)
-
-下一版本准备实现 http-flv http-hls 播放功能预计版本(1.0)时间为(21年10月中旬左右)
 
 ## 使用指南
 
@@ -16,20 +13,13 @@
 
 鼻祖全能王：[**ffmpeg**](https://www.ffmpeg.org/) 可以进行推流，播放，格式转换等等超多超强大的功能
 
+## Reference 
 
-## PDF reference 
+RTMP 协议标准（复杂握手部分缺失）[Rtmp specification 1.0](https://www.adobe.com/content/dam/acom/en/devnet/rtmp/pdf/rtmp_specification_1.0.pdf)
 
-nginx rtmp拓展 https://github.com/arut/nginx-rtmp-module
+AMF 数据结构 [Action Message Format [0,3]](https://www.adobe.com/content/dam/acom/en/devnet/pdf/amf0-file-format-specification.pdf)
 
-Amf数据格式文档 [Amf data structure](https://www.adobe.com/content/dam/acom/en/devnet/pdf/amf0-file-format-specification.pdf)
-
-Rtmp协议详解（握手部分文档缺失【存在握手验证的情况】） [Rtmp specification](https://www.adobe.com/content/dam/acom/en/devnet/rtmp/pdf/rtmp_specification_1.0.pdf)
-
-FLV 视频格式的封装
-
-MPEG2-TS 视频格式封装
-
-HTTP Live Streaming (HLS) 切片封装
+FLV 数据结构 [Video File Format Specification version 10](https://www.adobe.com/content/dam/acom/en/devnet/flv/video_file_format_spec_v10.pdf)
 
 ## License
 
