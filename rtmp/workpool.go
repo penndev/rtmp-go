@@ -2,7 +2,6 @@ package rtmp
 
 import (
 	"fmt"
-	"log"
 	"rtmp-go/av"
 	"time"
 )
@@ -145,12 +144,10 @@ func addFlvListen(pools string) chan Pack {
 	flv.GenFlv(pools + s)
 	client := make(chan Pack)
 	go func() {
-		log.Println("addFlvListen - - - - > start")
 		for pk := range client {
 			flv.AddTag(pk.MessageTypeID, pk.Timestamp, pk.PayLoad)
 		}
 		defer flv.Close()
-		log.Println("addFlvListen - - - - > end")
 	}()
 	return client
 }

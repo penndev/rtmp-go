@@ -175,8 +175,6 @@ func netHandleCommand(chk *Chunk, conn *Conn, app *App) error {
 
 // 阻塞读chunk消息。
 func handle(chk *Chunk, conn *Conn) {
-	log.Println("创建线程handle")
-	defer log.Println("回收线程handle")
 	for {
 		pk, err := chk.handlesMsg()
 		if err != nil {

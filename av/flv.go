@@ -137,16 +137,16 @@ func (f *FLV) Close() {
 //GenFlv 生成新的flv
 func (f *FLV) GenFlv(name string) error {
 	var err error
-	f.File, err = os.OpenFile(name+".flv", os.O_WRONLY|os.O_CREATE, 0644)
+	f.File, err = os.OpenFile("runtime/"+name+".flv", os.O_WRONLY|os.O_CREATE, 0644)
 	if err != nil {
 		log.Println(err)
 	}
-	f.testh264, err = os.OpenFile(name+".h264", os.O_WRONLY|os.O_CREATE, 0644)
+	f.testh264, err = os.OpenFile("runtime/"+name+".h264", os.O_WRONLY|os.O_CREATE, 0644)
 	if err != nil {
 		log.Println(err)
 	}
 
-	f.testaac, err = os.OpenFile(name+".aac", os.O_WRONLY|os.O_CREATE, 0644)
+	f.testaac, err = os.OpenFile("runtime/"+name+".aac", os.O_WRONLY|os.O_CREATE, 0644)
 	if err != nil {
 		log.Println(err)
 	}
