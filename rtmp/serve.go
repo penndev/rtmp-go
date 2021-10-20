@@ -3,7 +3,7 @@ package rtmp
 import (
 	"context"
 	"fmt"
-	"io"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -88,7 +88,7 @@ func NewRtmp() error {
 	addrs, _ := net.LookupHost(name)
 	fmt.Print("\n     RTMP推流地址(demo): rtmp://" + addrs[0] + ":1935/live/room \n\n")
 
-	fmt.Println(httpflv.Serve(func(w http.ResponseWriter, req *http.Request) {
+	go httpflv.Serve(func(w http.ResponseWriter, req *http.Request) {
 
 		flvPath := strings.Split(req.URL.Path, ".")
 		if len(flvPath) != 2 || flvPath[1] != "flv" {
@@ -102,13 +102,13 @@ func NewRtmp() error {
 			return
 		}
 
-		f, err := os.Open("./runtime/live_boot1634624720.flv")
-		if err != nil {
-			panic(err)
+		// io.Copy(w, f)
+		ok := addHTTPFlvListen(w, s.App, appPath[0], appPath[1])
+		if !ok {
+			log.Println("Http flv Play stream not found:", appPath)
 		}
-		io.Copy(w, f)
 
-	}))
+	})
 
 	if err := s.listen(); err != nil {
 		return err
