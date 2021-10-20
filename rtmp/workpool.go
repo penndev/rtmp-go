@@ -2,7 +2,7 @@ package rtmp
 
 import (
 	"fmt"
-	"log"
+	"io"
 	"rtmp-go/av"
 	"time"
 )
@@ -109,6 +109,16 @@ func (a *App) addPlay(appName string, streamName string, client chan Pack) (*str
 	return app, true
 }
 
+func (a *App) addHttpFlvPlay(appName string, streamName string, client chan Pack) bool {
+	pool := appName + "_" + streamName
+	app, ok := a.List[pool]
+	if !ok {
+		return false
+	}
+	app.client[client] = true
+	return true
+}
+
 func (a *App) delPublish(appName string, streamName string) {
 	pool := appName + "_" + streamName
 	app, ok := a.List[pool]
@@ -130,6 +140,12 @@ func (a *App) delPlay(appName string, streamName string, client chan Pack) {
 	delete(app.client, client)
 }
 
+func (a *App) isExist(appName string, streamName string) bool {
+	pool := appName + "_" + streamName
+	_, ok := a.List[pool]
+	return ok
+}
+
 func newApp() *App {
 	app := &App{
 		Gloab: make(map[string]listener),
@@ -145,12 +161,41 @@ func addFlvListen(pools string) chan Pack {
 	flv.GenFlv(pools + s)
 	client := make(chan Pack)
 	go func() {
-		log.Println("addFlvListen - - - - > start")
 		for pk := range client {
 			flv.AddTag(pk.MessageTypeID, pk.Timestamp, pk.PayLoad)
 		}
 		defer flv.Close()
-		log.Println("addFlvListen - - - - > end")
 	}()
 	return client
+}
+
+func addHTTPFlvListen(w io.Writer, app *App, appName, streamName string) bool {
+	flv := av.NewFlv(w)
+	client := make(chan Pack)
+
+	pool := appName + "_" + streamName
+	stream, ok := app.List[pool]
+	if !ok {
+		return false
+	}
+	//设置初始化。前三tag
+	pk := Pack{}
+
+	pk.MessageTypeID = 18
+	pk.PayLoad = stream.meta.meta
+	flv.TagWrite(pk.MessageTypeID, pk.Timestamp, byte(pk.ExtendTimestamp), pk.PayLoad)
+
+	pk.MessageTypeID = 9
+	pk.PayLoad = stream.meta.video
+	flv.TagWrite(pk.MessageTypeID, pk.Timestamp, byte(pk.ExtendTimestamp), pk.PayLoad)
+
+	pk.MessageTypeID = 8
+	pk.PayLoad = stream.meta.audit
+	flv.TagWrite(pk.MessageTypeID, pk.Timestamp, byte(pk.ExtendTimestamp), pk.PayLoad)
+
+	stream.client[client] = true
+	for pk := range client {
+		flv.TagWrite(pk.MessageTypeID, pk.Timestamp, byte(pk.ExtendTimestamp), pk.PayLoad)
+	}
+	return true
 }

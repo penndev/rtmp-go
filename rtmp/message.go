@@ -121,7 +121,7 @@ func netStreamCommand(chk *Chunk, conn *Conn) error {
 
 //阻塞处理 AVPackChan 收到的消息。
 func netHandleCommand(chk *Chunk, conn *Conn, app *App) error {
-	go handle(chk, conn)
+	go handle(chk, conn, app)
 	var client func(Pack)
 	var close func()
 	if conn.IsPublish {
@@ -161,8 +161,8 @@ func netHandleCommand(chk *Chunk, conn *Conn, app *App) error {
 			}
 		}
 	}
-	// 如果流已经被停止了
-	// 或者客户端直接断开连接了
+	// 如果主播端流已经被停止了
+	// 如果客户端直接断开连接了
 	// 则直接停止当前线程。
 	if !conn.IsStoped {
 		for avpack := range conn.AVPackChan {
@@ -174,7 +174,7 @@ func netHandleCommand(chk *Chunk, conn *Conn, app *App) error {
 }
 
 // 阻塞读chunk消息。
-func handle(chk *Chunk, conn *Conn) {
+func handle(chk *Chunk, conn *Conn, app *App) {
 	log.Println("创建线程handle")
 	defer log.Println("回收线程handle")
 	for {
@@ -202,6 +202,7 @@ func handle(chk *Chunk, conn *Conn) {
 			case "deleteStream":
 				// 主动关闭
 				conn.IsStoped = true
+				app.delPlay(conn.App, conn.Stream, conn.AVPackChan)
 				close(conn.AVPackChan)
 				conn.onClose()
 				return
