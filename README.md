@@ -1,8 +1,48 @@
 # rtmp-go
 
-实现了rtmp协议，可进行视频rtmp推流,rtmp播放,http-flv播放, 存储直播flv流视频功能
+实现了rtmp协议，可进行视频rtmp推流,rtmp播放,http-flv播放, 存储直播flv文件等功能
 
 ## 演示流程
+第一步
+```bash
+#如果你已经配置好了go开发环境可直接执行go get -u
+go get -u github.com/penndev/rtmp-go
+#然后直接运行命令 即可
+rtmp-go
+#程序运行后展示如下内容
+>output:
+             _                                    
+        .___| |_. _ ___ _  _ __ ______ __ _  ___  
+        | __| __|/ _   _  \| _ \______/ _. |/ _ \ 
+        | | | |_| | | | | | |_) |    | (_| | (_) |
+        |_|  \__|_| |_| |_| .__/      \__, |\___/ 
+                          | |          __/ |      
+                          |_|         |___/       
+    
+    RTMP推流地址(demo): rtmp://127.0.0.1:1935/live/room 
+
+```
+> 如果你本地没有配置go环境则[点我下载可执行文件](https://github.com/penndev/rtmp-go/releases)
+
+第二步
+
+需下载并安装下面的相关工具  obs(推流工具，主播工具)   vlc(播放器，用户端)
+
+1. 在obs中设置推流地址为 `rtmp://127.0.0.1:1935/live/room` 注意实际IP
+
+2. 推流后程序会输出可播放的rtmp播放 与 http-flv播放地址，同时在 runtime 中生成 flv 文件
+
+3. 根据 2 获取的url在vlc中进行播放
+
+**注意**
+
+- 目前主要处理了h264的编码格式，其他格式可能会抛异常
+
+- win10安装docker 可能 1935 端口启动失败
+
+- 如果需要我帮助或者讨论，请在底部邮件中联系我。若比较紧急可WeChat:penndev
+
+- 如果你遇到其他问题，欢迎并感谢提交[issues](https://github.com/penndev/rtmp-go/issues/new)
 
 
 ## 相关工具
