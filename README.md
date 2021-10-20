@@ -4,13 +4,14 @@
 
 ## 演示流程
 第一步
-```bash
+```
 #如果你已经配置好了go开发环境可直接执行go get -u
-go get -u github.com/penndev/rtmp-go
-#然后直接运行命令 即可
-rtmp-go
-#程序运行后展示如下内容
->output:
+> go get -u github.com/penndev/rtmp-go
+
+#然后直接运行命令
+> rtmp-go
+
+#程序运行后展示如下内容:
              _                                    
         .___| |_. _ ___ _  _ __ ______ __ _  ___  
         | __| __|/ _   _  \| _ \______/ _. |/ _ \ 
