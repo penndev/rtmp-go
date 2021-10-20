@@ -140,6 +140,12 @@ func (a *App) delPlay(appName string, streamName string, client chan Pack) {
 	delete(app.client, client)
 }
 
+func (a *App) isExist(appName string, streamName string) bool {
+	pool := appName + "_" + streamName
+	_, ok := a.List[pool]
+	return ok
+}
+
 func newApp() *App {
 	app := &App{
 		Gloab: make(map[string]listener),

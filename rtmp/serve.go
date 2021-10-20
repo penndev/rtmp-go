@@ -20,7 +20,7 @@ type Serve struct {
 
 func (srv *Serve) handle(nc net.Conn) {
 	defer nc.Close()
-
+	log.Println(nc.RemoteAddr().String(), "-> nc connected")
 	// 处理握手相关
 	if err := ServeHandShake(nc); err != nil {
 		panic(err)
@@ -41,6 +41,7 @@ func (srv *Serve) handle(nc net.Conn) {
 	if err := netHandleCommand(chk, conn, srv.App); err != nil {
 		panic(err)
 	}
+	log.Println(nc.RemoteAddr().String(), "-> nc closeID")
 }
 
 // 启动Tcp监听
@@ -102,7 +103,11 @@ func NewRtmp() error {
 			return
 		}
 
-		// io.Copy(w, f)
+		if !s.App.isExist(appPath[0], appPath[1]) {
+			http.NotFound(w, req)
+			return
+		}
+
 		ok := addHTTPFlvListen(w, s.App, appPath[0], appPath[1])
 		if !ok {
 			log.Println("Http flv Play stream not found:", appPath)
