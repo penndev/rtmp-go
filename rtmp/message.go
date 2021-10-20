@@ -4,7 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"rtmp-go/amf"
+
+	"github.com/penndev/rtmp-go/amf"
 )
 
 type Pack struct {

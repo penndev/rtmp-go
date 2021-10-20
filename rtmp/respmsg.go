@@ -1,6 +1,6 @@
 package rtmp
 
-import "rtmp-go/amf"
+import "github.com/penndev/rtmp-go/amf"
 
 func respConnect(b bool) []byte {
 	if !b {

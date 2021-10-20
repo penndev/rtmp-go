@@ -2,7 +2,8 @@ package main
 
 import (
 	"fmt"
-	"rtmp-go/rtmp"
+
+	"github.com/penndev/rtmp-go/rtmp"
 )
 
 func main() {

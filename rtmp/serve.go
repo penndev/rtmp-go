@@ -7,9 +7,10 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"rtmp-go/httpflv"
 	"strings"
 	"time"
+
+	"github.com/penndev/rtmp-go/httpflv"
 )
 
 type Serve struct {
