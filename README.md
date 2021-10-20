@@ -2,16 +2,19 @@
 
 实现了rtmp协议，可进行视频rtmp推流,rtmp播放,http-flv播放, 存储直播flv流视频功能
 
+## 演示流程
 
-## 使用指南
+
+## 相关工具
 
 推流软件:  [**obs**](https://obsproject.com/zh-cn) 使用obs进行推流
 
 播放器软件:  [**vlc**](https://www.videolan.org/vlc/) 万能播放器，不做介绍。
 
-基于浏览器的JS播放器:  [**videojs**](https://videojs.com/) 可 flv,mp4,hls,等等协议的播放 (浏览器不能实现rtmp流播放)
+全能王：[**ffmpeg**](https://www.ffmpeg.org/) 可以进行推流，播放，格式转换等等超多超强大的功能
 
-鼻祖全能王：[**ffmpeg**](https://www.ffmpeg.org/) 可以进行推流，播放，格式转换等等超多超强大的功能
+
+基于浏览器的JS播放器:  [**videojs**](https://videojs.com/) 可 flv,mp4,hls,等等协议的播放 (浏览器不能实现rtmp流播放)
 
 ## Reference 
 
