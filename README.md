@@ -12,7 +12,7 @@
 > rtmp-go
 
 > 如果你本地没有配置go环境则[点我下载可执行文件](https://github.com/penndev/rtmp-go/releases)
-
+```
 第二步
 
 需下载并安装下面的相关工具  obs(推流工具，主播工具)   vlc(播放器，用户端)
