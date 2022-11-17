@@ -1,28 +1,16 @@
 # rtmp-go
 
-实现了rtmp协议，可进行视频rtmp推流,rtmp播放,http-flv播放, 存储直播flv文件等功能
+实现了rtmp协议，可进行视频rtmp推流, rtmp播放, http-flv播放, 存储直播flv文件等功能
 
 ## 演示流程
 第一步
 ```
 #如果你已经配置好了go开发环境可直接执行go get -u
-> go get -u github.com/penndev/rtmp-go
+> go install github.com/penndev/rtmp-go@latest
 
 #然后直接运行命令
 > rtmp-go
 
-#程序运行后展示如下内容:
-             _                                    
-        .___| |_. _ ___ _  _ __ ______ __ _  ___  
-        | __| __|/ _   _  \| _ \______/ _. |/ _ \ 
-        | | | |_| | | | | | |_) |    | (_| | (_) |
-        |_|  \__|_| |_| |_| .__/      \__, |\___/ 
-                          | |          __/ |      
-                          |_|         |___/       
-    
-    RTMP推流地址(demo): rtmp://127.0.0.1:1935/live/room 
-
-```
 > 如果你本地没有配置go环境则[点我下载可执行文件](https://github.com/penndev/rtmp-go/releases)
 
 第二步
@@ -41,7 +29,7 @@
 
 - win10安装docker 可能 1935 端口启动失败
 
-- 如果需要我帮助或者讨论，请在底部邮件中联系我。若比较紧急可WeChat:penndev
+- 如果需要我帮助或者讨论，请在底部邮件中联系我。
 
 - 如果你遇到其他问题，欢迎并感谢提交[issues](https://github.com/penndev/rtmp-go/issues/new)
 
