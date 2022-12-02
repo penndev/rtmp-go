@@ -34,16 +34,15 @@
 - 如果你遇到其他问题，欢迎并感谢提交[issues](https://github.com/penndev/rtmp-go/issues/new)
 
 
-## 相关工具
+## 测试工具
 
-推流软件:  [**obs**](https://obsproject.com/zh-cn) 使用obs进行推流
+推流软件:  [**OBS**](https://obsproject.com/zh-cn) 使用obs进行推流
 
-播放器软件:  [**vlc**](https://www.videolan.org/vlc/) 万能播放器，不做介绍。
+桌面软件播放:  [**VLC**](https://www.videolan.org/vlc/)  播放器软件
 
-全能王：[**ffmpeg**](https://www.ffmpeg.org/) 可以进行推流，播放，格式转换等等超多超强大的功能
+FFMPEG 推流播放：[**FFMPEG**](https://www.ffmpeg.org/) 可以进行推流，播放，格式转换等等超多超强大的功能
 
-
-基于浏览器的JS播放器:  [**videojs**](https://videojs.com/) 可 flv,mp4,hls,等等协议的播放 (浏览器不能实现rtmp流播放)
+Web浏览器播放:  [**VideoJS**](https://videojs.com/) 可 flv,mp4,hls,等等协议的播放
 
 ## Reference 
 
@@ -55,4 +54,4 @@ FLV 数据结构 [Video File Format Specification version 10](https://www.adobe.
 
 ## License
 
-rtmp-go 为本人[pennilessfor@gmail.com](mailto:pennilessfor@gmail.com)学习研究制作，不存在任何限制。希望可以和更多伙伴互相学习交流
+rtmp-go 为本人[pennilessfor@gmail.com](mailto:pennilessfor@gmail.com)学习研究制作，希望可以和更多伙伴互相学习交流
