@@ -2,48 +2,36 @@
 
 基于rtmp1.0协议开发的直播服务器，支持rtmp、http-flv播放。直播全程录制等功能。
 
-## rtmp push
+## 安装
 
-#### install
+可直接运行`go install github.com/penndev/rtmp-go@latest`安装 或  [下载](./releases) 可执行文件
 
-```
-go install github.com/penndev/rtmp-go@latest
-rtmp-go
-```
 
-直接 [下载](./releases) 可执行文件
+## 推流
 
-### ffmpeg
-
+使用ffmpeg进行rtmp推流
 ```
 > ffmpeg -re -i <filename.mp4> -vcodec h264 -acodec aac -f flv rtmp://localhost/live/room
 ```
-### obs
 
+
+使用obs studio进行rtmp推流
 ```
-OBS Studio > 设置 > 直播 > 服务器 rtmp://127.0.0.1:1935/live/  
+OBS Studio > 设置 > 直播 > 服务器 rtmp://127.0.0.1:1935/live/
 OBS Studio > 设置 > 直播 > 推流码 room
 ```
-## play
 
-#### 播放地址
-查看控制台输出播放地址
-或者查看 rtmp topic 中的 map key
+## 播放
 
-### ffplay 
+**播放地址为 `rtmp Serve 中 Topic 的key组成 ** (不同的工具组成的key不同，请留意观察控制台输出)
 
-#### ffplay rtmp play
 
+使用 ffmpeg 播放器播放
 ```
-> ffplay rtmp://localhost/<urlpath>
+> ffplay <urlpath>
 ```
+或者使用其他支持相关视频格式的播放器进行播放
 
-### vlc media player
-
-#### vlc rtmp play
-```
-vlc > 媒体 > 打开网络串流 > 网络 > rtmp://localhost/<urlpath>
-```
 
 ## Reference 
 
