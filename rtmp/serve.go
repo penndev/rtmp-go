@@ -38,17 +38,26 @@ func (srv *Serve) handle(nc net.Conn) {
 		log.Printf("[%s]-> rtmp stream fail(%s)", ncaddr, err)
 		return
 	}
+	topic := conn.App + conn.Stream
+	log.Printf("[%s]-> rtmp topic start(%s)", ncaddr, topic)
 	if conn.IsPublish {
-		topic := conn.App + conn.Stream
 		pubsub := srv.newPublisher(topic)
 		conn.handlePublishing(func(pk Pack) {
 			pubsub.Publish(pk)
 		})
 		srv.colsePublisher(topic)
 	} else {
-		// srv.mu.Lock()
-		// 判断是否有发布者
-		// srv.mu.Unlock()
+		topic := conn.App + conn.Stream
+		if pubsub, ok := srv.getPublisher(topic); ok {
+			sch := pubsub.Subscription()
+			defer pubsub.SubscriptionExit(sch)
+			if err := conn.handlePlay(sch); err != nil {
+				log.Printf("[%s]-> rtmp play fail(%s)", ncaddr, err)
+			}
+		} else {
+			log.Printf("[%s]-> rtmp play fail(%s)", ncaddr, topic+" not found")
+		}
+
 	}
 }
 
@@ -80,8 +89,10 @@ func (srv *Serve) newPublisher(topic string) *PubSub {
 	srv.mu.Lock()
 	defer srv.mu.Unlock()
 	ps := &PubSub{
+		buffer:     3,
 		timeout:    3 * time.Second,
 		subscriber: make(map[chan Pack]bool),
+		mediaInfo:  metaInfo{},
 	}
 	// 处理全局adapter listen
 	for _, adcb := range srv.Adapter {
@@ -99,6 +110,14 @@ func (srv *Serve) colsePublisher(topic string) {
 		defer srv.mu.Unlock()
 		ps.Close()
 		delete(srv.Topic, topic)
+	}
+}
+
+func (srv *Serve) getPublisher(topic string) (*PubSub, bool) {
+	if pubsub, ok := srv.Topic[topic]; ok {
+		return pubsub, true
+	} else {
+		return nil, false
 	}
 }
 

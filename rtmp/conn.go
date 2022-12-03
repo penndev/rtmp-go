@@ -21,13 +21,13 @@ type Conn struct {
 // return true 继续下一步
 func (c *Conn) onConnect(app string) bool {
 	c.App = app
-	fmt.Println("c.app ->", c.App)
+	// fmt.Println("c.app ->", c.App)
 	return true
 }
 
 func (c *Conn) onPublish(stream string) bool {
 	//验证密钥。
-	fmt.Println("c.stream ->", stream)
+	// fmt.Println("c.stream ->", stream)
 	c.Stream = stream
 	c.IsPublish = true
 
@@ -174,11 +174,24 @@ func (c *Conn) handlePublishing(cb func(Pack)) error {
 	}
 }
 
-func (c *Conn) handlePlay() error {
-	// 多路复用
-	select {
-	// 监听用户关闭消息
-	// 监听play播放的流
+func (c *Conn) handlePlay(subscriberCh <-chan Pack) error {
+	clientCh := make(chan error)
+	go func() {
+		// 负责监听客户端断开连接。
+		err := c.handlePublishing(func(pk Pack) {})
+		clientCh <- err
+	}()
+	for {
+		select {
+		case pk, ok := <-subscriberCh:
+			if !ok {
+				c.chk.setStreamEof(DefaultStreamID)
+				return errors.New("subscriber chan handle close")
+			}
+			c.chk.sendPack(DefaultStreamID, pk)
+		case clientCh := <-clientCh:
+			return clientCh
+		}
 	}
 }
 
