@@ -39,12 +39,12 @@ func (srv *Serve) handle(nc net.Conn) {
 		return
 	}
 	if conn.IsPublish {
-		// create pubsub publisher
-		pubsub := srv.newPublisher("test_name")
+		topic := conn.App + conn.Stream
+		pubsub := srv.newPublisher(topic)
 		conn.handlePublishing(func(pk Pack) {
 			pubsub.Publish(pk)
 		})
-		srv.colsePublisher("test_name")
+		srv.colsePublisher(topic)
 	} else {
 		// srv.mu.Lock()
 		// 判断是否有发布者

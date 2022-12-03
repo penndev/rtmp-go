@@ -13,11 +13,10 @@ func main() {
 	rtmpSrv.AdapterRegister(func(name string, ch <-chan rtmp.Pack) {
 		var flv av.FLV
 		flv.GenFlv(name)
-		defer flv.Close()
 		for pk := range ch {
-			log.Println("pk ty id->", pk.MessageTypeID)
 			flv.AddTag(pk.MessageTypeID, pk.Timestamp, pk.PayLoad)
 		}
+		flv.Close()
 	})
 	err := rtmpSrv.Listen()
 	if err != nil {
