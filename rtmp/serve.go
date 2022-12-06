@@ -63,8 +63,8 @@ func (srv *Serve) handle(nc net.Conn) {
 
 // 启动Tcp监听
 // 处理golang net Listenconfig 参数
-func (srv *Serve) Listen() error {
-	ln, err := net.Listen("tcp", srv.Addr)
+func (srv *Serve) Listen(address string) error {
+	ln, err := net.Listen("tcp", address)
 	if err != nil {
 		return err
 	}
@@ -83,6 +83,15 @@ func (srv *Serve) AdapterRegister(al adapterlisten) {
 	srv.mu.Lock()
 	srv.Adapter = append(srv.Adapter, al)
 	srv.mu.Unlock()
+}
+
+//
+func (srv *Serve) SubscriptionTopic(topic string) (*PubSub, bool) {
+	if pubsub, ok := srv.Topic[topic]; ok {
+		return pubsub, true
+	} else {
+		return nil, false
+	}
 }
 
 func (srv *Serve) newPublisher(topic string) *PubSub {
@@ -124,7 +133,6 @@ func (srv *Serve) getPublisher(topic string) (*PubSub, bool) {
 // create new rtmp serve
 func NewRtmp() *Serve {
 	s := &Serve{
-		Addr:    "127.0.0.1:1935",
 		Topic:   make(map[string]*PubSub),
 		Adapter: []adapterlisten{},
 	}

@@ -1,25 +1,20 @@
 package main
 
 import (
-	"log"
+	"net/http"
 
-	"github.com/penndev/rtmp-go/av"
+	"github.com/penndev/rtmp-go/flv"
 	"github.com/penndev/rtmp-go/rtmp"
 )
 
 func main() {
 	rtmpSrv := rtmp.NewRtmp()
-	// 写入flv文件
-	rtmpSrv.AdapterRegister(func(name string, ch <-chan rtmp.Pack) {
-		var flv av.FLV
-		flv.GenFlv(name)
-		for pk := range ch {
-			flv.AddTag(pk.MessageTypeID, pk.Timestamp, pk.PayLoad)
-		}
-		flv.Close()
-	})
-	err := rtmpSrv.Listen()
-	if err != nil {
-		log.Println(err)
-	}
+	rtmpSrv.AdapterRegister(flv.Adapterflv) // 写入flv文件
+	go func() {
+		http.HandleFunc("/play.flv", flv.Handleflv(rtmpSrv.SubscriptionTopic)) // http flv 播放
+		err := http.ListenAndServe("127.0.0.1:80", nil)
+		panic(err)
+	}()
+	err := rtmpSrv.Listen("127.0.0.1:1935")
+	panic(err)
 }
