@@ -13,6 +13,5 @@ func TestFlv(t *testing.T) {
 	}
 	t.Log(tag.genByte())
 
-	var flv FLV
-	t.Log(flv.genHead("av"))
+	t.Log(NewHeader("av"))
 }

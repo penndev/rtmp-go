@@ -32,11 +32,7 @@ type FLV struct {
 
 	//调试结束就删除
 	File *os.File
-	//调试结束就删除
-	testaac *os.File
-	//调试结束就删除
-	testh264 *os.File
-	w        io.Writer
+	w    io.Writer
 }
 
 // FLV Tag 结构体
