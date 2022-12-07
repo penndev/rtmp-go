@@ -1,4 +1,4 @@
-package av
+package flv
 
 import (
 	"encoding/binary"

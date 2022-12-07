@@ -1,123 +1,141 @@
 package rtmp
 
 import (
-	"context"
-	"fmt"
 	"log"
 	"net"
-	"net/http"
-	"os"
-	"strings"
+	"sync"
 	"time"
-
-	"github.com/penndev/rtmp-go/httpflv"
 )
 
+type adapterlisten func(string, <-chan Pack)
+
 type Serve struct {
+	mu      sync.RWMutex
 	Addr    string
-	Timeout time.Duration
-	App     *App
+	Topic   map[string]*PubSub
+	Adapter []adapterlisten
 }
 
 func (srv *Serve) handle(nc net.Conn) {
-	defer nc.Close()
-	log.Println(nc.RemoteAddr().String(), "-> nc connected")
-	// 处理握手相关
+	ncaddr := nc.RemoteAddr().String()
+	defer func() {
+		nc.Close()
+		log.Printf("[%s]-> nc closed", ncaddr)
+	}()
+	log.Printf("[%s]-> nc connected", ncaddr)
+	// check rtmp handshake
 	if err := ServeHandShake(nc); err != nil {
-		panic(err)
+		log.Printf("[%s]-> conn handshake fail", ncaddr)
+		return
 	}
+	// create new rtmp conn
+	conn := NewConn(nc)
+	if err := conn.handleConnect(); err != nil {
+		log.Printf("[%s]-> rtmp connection fail(%s)", ncaddr, err)
+		return
+	}
+	if err := conn.handleStream(); err != nil {
+		log.Printf("[%s]-> rtmp stream fail(%s)", ncaddr, err)
+		return
+	}
+	topic := conn.App + conn.Stream
+	log.Printf("[%s]-> rtmp topic start(%s)", ncaddr, topic)
+	if conn.IsPublish {
+		pubsub := srv.newPublisher(topic)
+		conn.handlePublishing(func(pk Pack) {
+			pubsub.Publish(pk)
+		})
+		srv.colsePublisher(topic)
+	} else {
+		topic := conn.App + conn.Stream
+		if pubsub, ok := srv.getPublisher(topic); ok {
+			sch := pubsub.Subscription()
+			defer pubsub.SubscriptionExit(sch)
+			if err := conn.handlePlay(sch); err != nil {
+				log.Printf("[%s]-> rtmp play fail(%s)", ncaddr, err)
+			}
+		} else {
+			log.Printf("[%s]-> rtmp play fail(%s)", ncaddr, topic+" not found")
+		}
 
-	chk := newChunk(nc)
-	conn := newConn()
-
-	// 处理连接流
-	if err := netConnectionCommand(chk, conn); err != nil {
-		panic(err)
 	}
-	// 处理初始化流
-	if err := netStreamCommand(chk, conn); err != nil {
-		panic(err)
-	}
-	// 主流程
-	if err := netHandleCommand(chk, conn, srv.App); err != nil {
-		panic(err)
-	}
-	log.Println(nc.RemoteAddr().String(), "-> nc closeID")
 }
 
 // 启动Tcp监听
 // 处理golang net Listenconfig 参数
-func (srv *Serve) listen() error {
-	var lc = net.ListenConfig{
-		KeepAlive: srv.Timeout,
-	}
-	// 启动TCP监听
-	ln, err := lc.Listen(context.Background(), "tcp", srv.Addr)
+func (srv *Serve) Listen(address string) error {
+	ln, err := net.Listen("tcp", address)
 	if err != nil {
 		return err
 	}
 	defer ln.Close()
-
 	for {
 		nc, err := ln.Accept()
 		if err != nil {
 			return err
 		}
-		// 开始业务流程
 		go srv.handle(nc)
 	}
 }
 
-// 运行Rtmp协议。
-// 阻塞函数
-func NewRtmp() error {
+// 处理全局适配器，通常生成全局文件用
+func (srv *Serve) AdapterRegister(al adapterlisten) {
+	srv.mu.Lock()
+	srv.Adapter = append(srv.Adapter, al)
+	srv.mu.Unlock()
+}
+
+//
+func (srv *Serve) SubscriptionTopic(topic string) (*PubSub, bool) {
+	if pubsub, ok := srv.Topic[topic]; ok {
+		return pubsub, true
+	} else {
+		return nil, false
+	}
+}
+
+func (srv *Serve) newPublisher(topic string) *PubSub {
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+	ps := &PubSub{
+		buffer:     3,
+		timeout:    3 * time.Second,
+		subscriber: make(map[chan Pack]bool),
+		mediaInfo:  metaInfo{},
+	}
+	// 处理全局adapter listen
+	for _, adcb := range srv.Adapter {
+		ch := make(chan Pack)
+		go adcb(topic, ch)
+		ps.subscriber[ch] = true
+	}
+	srv.Topic[topic] = ps
+	return ps
+}
+
+func (srv *Serve) colsePublisher(topic string) {
+	if ps, ok := srv.Topic[topic]; ok {
+		srv.mu.Lock()
+		defer srv.mu.Unlock()
+		ps.Close()
+		delete(srv.Topic, topic)
+	}
+}
+
+func (srv *Serve) getPublisher(topic string) (*PubSub, bool) {
+	if pubsub, ok := srv.Topic[topic]; ok {
+		return pubsub, true
+	} else {
+		return nil, false
+	}
+}
+
+// create new rtmp serve
+func NewRtmp() *Serve {
 	s := &Serve{
-		Addr:    ":1935",
-		Timeout: 10 * time.Second,
-		App:     newApp(),
+		Topic:   make(map[string]*PubSub),
+		Adapter: []adapterlisten{},
 	}
 
-	fmt.Print(`
-             _                                    
-        .___| |_. _ ___ _  _ __ ______ __ _  ___  
-        | __| __|/ _   _ \| '_ \______/ _. |/ _ \ 
-        | | | |_| | | | | | |_) |    | (_| | (_) |
-        |_|  \__|_| |_| |_| .__/      \__, |\___/ 
-                          | |          __/ |      
-                          |_|         |___/       
-	`)
-	name, _ := os.Hostname()
-	addrs, _ := net.LookupHost(name)
-	fmt.Print("\n     RTMP推流地址(demo): rtmp://" + addrs[0] + ":1935/live/room \n\n")
-
-	go httpflv.Serve(func(w http.ResponseWriter, req *http.Request) {
-
-		flvPath := strings.Split(req.URL.Path, ".")
-		if len(flvPath) != 2 || flvPath[1] != "flv" {
-			http.NotFound(w, req)
-			return
-		}
-
-		appPath := strings.Split(flvPath[0], "/")[1:]
-		if len(appPath) != 2 {
-			http.NotFound(w, req)
-			return
-		}
-
-		if !s.App.isExist(appPath[0], appPath[1]) {
-			http.NotFound(w, req)
-			return
-		}
-
-		ok := addHTTPFlvListen(w, s.App, appPath[0], appPath[1])
-		if !ok {
-			log.Println("Http flv Play stream not found:", appPath)
-		}
-
-	})
-
-	if err := s.listen(); err != nil {
-		return err
-	}
-	return nil
+	return s
 }

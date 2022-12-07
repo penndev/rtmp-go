@@ -41,6 +41,11 @@ type ChunkMessageHeader struct {
 	ExtendTimestamp uint32 // 4 byte
 }
 
+type Pack struct {
+	ChunkMessageHeader
+	PayLoad []byte
+}
+
 // Chunk 处理rtmp中底层的流数据
 // rtmp 协议文档中每个rtmp被分割为多个chunk
 // 阅读官方详细说明   5.3. Chunking   11 page
