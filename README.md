@@ -4,8 +4,7 @@
 
 ## 安装
 
-可直接运行`go install github.com/penndev/rtmp-go@latest`安装 或  [下载](./releases) 可执行文件
-
+可直接运行`go install github.com/penndev/rtmp-go@latest`安装 或  [下载](../../releases) 可执行文件
 
 ## 推流
 
