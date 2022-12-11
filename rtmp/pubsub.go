@@ -22,6 +22,7 @@ type PubSub struct {
 }
 
 func (ps *PubSub) sendPack(ch chan Pack, pk Pack) {
+	// 还是会有退出的线程发送报错
 	select {
 	case ch <- pk:
 	case <-time.After(ps.timeout):

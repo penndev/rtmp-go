@@ -3,7 +3,6 @@ package flv
 import (
 	"encoding/binary"
 	"io"
-	"os"
 )
 
 //FLV header
@@ -30,9 +29,7 @@ type FLV struct {
 	// FLV存储时间为累加时间
 	Timestamp uint32
 
-	//调试结束就删除
-	File *os.File
-	w    io.Writer
+	w io.Writer
 }
 
 // FLV Tag 结构体
