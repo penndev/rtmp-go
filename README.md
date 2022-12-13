@@ -2,17 +2,12 @@
 
 基于rtmp1.0协议开发的直播服务器，支持rtmp、http-flv播放。直播全程录制等功能。
 
-## 安装
-
-可直接运行`go install github.com/penndev/rtmp-go@latest`安装 或  [下载](../../releases) 可执行文件
-
 ## 推流
 
 使用ffmpeg进行rtmp推流
 ```
 > ffmpeg -re -i <filename.mp4> -vcodec h264 -acodec aac -f flv rtmp://localhost/live/room
 ```
-
 
 使用obs studio进行rtmp推流
 ```
