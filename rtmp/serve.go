@@ -39,7 +39,7 @@ func (srv *Serve) handle(nc net.Conn) {
 		return
 	}
 	topic := conn.App + conn.Stream
-	log.Printf("[%s]-> rtmp topic start(%s)", ncaddr, topic)
+	log.Printf("[%s]-> rtmp push new topic: %s \n - - - - Play List - - - -  \n rtmp: rtmp://127.0.0.1:1935/%s  \n flv: http://127.0.0.1:80/play.flv?topic=%s \n hls: http://127.0.0.1:80/play.m3u8?topic=%s", ncaddr, topic, topic, topic, topic)
 	if conn.IsPublish {
 		pubsub := srv.newPublisher(topic)
 		conn.handlePublishing(func(pk Pack) {

@@ -16,7 +16,7 @@
 
 使用obs studio进行rtmp推流
 ```
-OBS Studio > 设置 > 直播 > 服务器 rtmp://127.0.0.1:1935/live/
+OBS Studio > 设置 > 直播 > 服务器 rtmp://127.0.0.1:1935/live
 OBS Studio > 设置 > 直播 > 推流码 room
 ```
 

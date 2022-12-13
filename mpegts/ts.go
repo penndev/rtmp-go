@@ -10,17 +10,20 @@ import (
 var defaultH264HZ = 90
 
 func Adapterts(topic string, ch <-chan rtmp.Pack) {
-	var tslen uint32
-	t := &TsPack{}
 	filename := "runtime/" + url.QueryEscape(topic) + ".ts"
+
+	t := &TsPack{}
 	t.NewTs(filename)
-	// defer func(){清理}()
+	defer delete(cache, topic)
+	var tslen uint32 // single tsfile sum(dts)
 	for pk := range ch {
+		// gen new ts file (dts 5*second)
 		if tslen > 5000 {
 			var extinf = ExtInf{
 				Inf:  tslen,
 				File: filename,
 			}
+			// file add the hls cache
 			if v, ok := cache[topic]; ok {
 				cache[topic] = append(v, extinf)
 			} else {
@@ -35,5 +38,4 @@ func Adapterts(topic string, ch <-chan rtmp.Pack) {
 
 		tslen += pk.Timestamp
 	}
-
 }

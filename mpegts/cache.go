@@ -11,14 +11,15 @@ func init() {
 	cache = make(map[string][]ExtInf)
 }
 
-func LiveList(topic string) ([]ExtInf, bool) {
+func HlsLive(topic string) ([]ExtInf, int, bool) {
 	if v, ok := cache[topic]; ok {
-		if len(v) < 3 {
-			return v, ok
+		l := len(v)
+		if l < 3 {
+			return v, 0, ok
 		} else {
-			return v[len(v)-3:], ok
+			return v[l-3:], l, ok
 		}
 
 	}
-	return nil, false
+	return nil, 0, false
 }
