@@ -8,14 +8,13 @@ import (
 	"github.com/penndev/rtmp-go/flv"
 	"github.com/penndev/rtmp-go/handlers"
 	"github.com/penndev/rtmp-go/hls"
-	"github.com/penndev/rtmp-go/mpegts"
 	"github.com/penndev/rtmp-go/rtmp"
 )
 
 func main() {
 	rtmpSrv := rtmp.NewRtmp()
-	rtmpSrv.AdapterRegister(flv.Adapterflv)   // 写入flv录播文件
-	rtmpSrv.AdapterRegister(mpegts.Adapterts) // 生成mpegts文件
+	// rtmpSrv.AdapterRegister(flv.Adapterflv)   // 写入flv录播文件
+	// rtmpSrv.AdapterRegister(mpegts.Adapterts) // 生成mpegts文件
 	fmt.Println("运行中")
 	go func() {
 		http.Handle("/runtime/", http.StripPrefix("/runtime/", http.FileServer(http.Dir("./runtime"))))
