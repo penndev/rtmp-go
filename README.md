@@ -17,7 +17,7 @@ OBS Studio > 设置 > 直播 > 推流码 room
 
 ## 播放
 
-**播放地址为 `rtmp Serve 中 Topic 的key组成** (不同的推流工具组成的key可能会有不同，请留意控制台输出)
+**播放地址为 `rtmp Serve` 中 Topic 的key组成** (不同的推流工具组成的key可能会有不同，请留意控制台输出)
 
 使用 ffmpeg 播放器播放
 ```
