@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 
+	cors "github.com/penndev/rtmp-go/CORS"
 	"github.com/penndev/rtmp-go/rtmp"
 )
 
@@ -25,6 +26,7 @@ func Handleflv(subtop func(string) (*rtmp.PubSub, bool)) func(http.ResponseWrite
 	return func(w http.ResponseWriter, r *http.Request) {
 		param := r.URL.Query()
 		topic := param.Get("topic")
+		cors.SetCORS(&w)
 		if subscriber, ok := subtop(topic); ok {
 			flv := NewFlv(w)
 			ch := subscriber.Subscription()
