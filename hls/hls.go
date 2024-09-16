@@ -15,11 +15,11 @@ var HlsHeader = `#EXTM3U
 #EXT-X-TARGETDURATION:6
 #EXT-X-MEDIA-SEQUENCE:<sequence>`
 
-func Handlehls(subtop func(string) (*rtmp.PubSub, bool)) func(http.ResponseWriter, *http.Request) {
+func HandleHls(subTopic func(string) (*rtmp.PubSub, bool)) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		param := r.URL.Query()
 		topic := param.Get("topic")
-		if _, ok := subtop(topic); ok {
+		if _, ok := subTopic(topic); ok {
 			if c, l, ok := mpegts.HlsLive(topic); ok {
 				s := strings.Replace(HlsHeader, "<sequence>", strconv.Itoa(l), 1)
 				for _, v := range c {

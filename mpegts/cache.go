@@ -5,11 +5,7 @@ type ExtInf struct {
 	File string
 }
 
-var cache map[string][]ExtInf
-
-func init() {
-	cache = make(map[string][]ExtInf)
-}
+var cache = make(map[string][]ExtInf)
 
 func HlsLive(topic string) ([]ExtInf, int, bool) {
 	if v, ok := cache[topic]; ok {

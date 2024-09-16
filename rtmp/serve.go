@@ -7,62 +7,101 @@ import (
 	"time"
 )
 
-type adapterlisten func(string, <-chan Pack)
+type adapterListen func(string, <-chan Pack)
 
 type Serve struct {
-	mu      sync.RWMutex
-	Addr    string
-	Topic   map[string]*PubSub
-	Adapter []adapterlisten
+	mu    sync.RWMutex
+	Addr  string
+	Topic map[string]*PubSub
+
+	// 全局订阅器，所有新的推流都会被加入到这个队列。
+	Adapter []adapterListen
+}
+
+// 当有新的推送消息时。
+func (srv *Serve) newPublisher(topic string) *PubSub {
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+	ps := &PubSub{
+		buffer:     3,
+		timeout:    3 * time.Second,
+		subscriber: make(map[chan Pack]bool),
+		mediaInfo:  metaInfo{},
+	}
+	// 处理全局adapter listen
+	for _, adapterCallBack := range srv.Adapter {
+		ch := make(chan Pack)
+		go adapterCallBack(topic, ch)
+		ps.subscriber[ch] = true
+	}
+	srv.Topic[topic] = ps
+	return ps
+}
+
+// 播放客户端主动关闭
+func (srv *Serve) closePublisher(topic string) {
+	if ps, ok := srv.Topic[topic]; ok {
+		srv.mu.Lock()
+		defer srv.mu.Unlock()
+		ps.Close()
+		delete(srv.Topic, topic)
+	}
+}
+
+// 播放客户端获取实例。
+func (srv *Serve) getPublisher(topic string) (*PubSub, bool) {
+	if pubsub, ok := srv.Topic[topic]; ok {
+		return pubsub, true
+	} else {
+		return nil, false
+	}
 }
 
 func (srv *Serve) handle(nc net.Conn) {
-	ncaddr := nc.RemoteAddr().String()
 	defer func() {
 		nc.Close()
-		log.Printf("[%s]-> nc closed", ncaddr)
 	}()
-	log.Printf("[%s]-> nc connected", ncaddr)
 	// check rtmp handshake
 	if err := ServeHandShake(nc); err != nil {
-		log.Printf("[%s]-> conn handshake fail", ncaddr)
+		log.Printf("%s ServeHandShake fail err[%s]", nc.RemoteAddr(), err.Error())
 		return
 	}
 	// create new rtmp conn
 	conn := NewConn(nc)
 	if err := conn.handleConnect(); err != nil {
-		log.Printf("[%s]-> rtmp connection fail(%s)", ncaddr, err)
+		log.Printf("%s handleConnect fail err[%s]", nc.RemoteAddr(), err.Error())
 		return
 	}
 	if err := conn.handleStream(); err != nil {
-		log.Printf("[%s]-> rtmp stream fail(%s)", ncaddr, err)
+		log.Printf("%s handleStream fail err[%s]", nc.RemoteAddr(), err.Error())
 		return
 	}
-	topic := conn.App + conn.Stream
-	log.Printf("[%s]-> rtmp push new topic: %s \n - - - - Play List - - - -  \n rtmp: rtmp://127.0.0.1:1935/%s  \n flv: http://127.0.0.1:80/play.flv?topic=%s \n hls: http://127.0.0.1:80/play.m3u8?topic=%s", ncaddr, topic, topic, topic, topic)
 	if conn.IsPublish {
+		topic := conn.App + conn.Stream
+		log.Printf("[Notify] rtmp push new topic: %s\n- - - - Play List URL - - - -  \nrtmp: rtmp://127.0.0.1:1935/%s  \nflv: http://127.0.0.1:80/play.flv?topic=%s \nhls: http://127.0.0.1:80/play.m3u8?topic=%s", topic, topic, topic, topic)
 		pubsub := srv.newPublisher(topic)
 		conn.handlePublishing(func(pk Pack) {
 			pubsub.Publish(pk)
 		})
-		srv.colsePublisher(topic)
+		srv.closePublisher(topic)
 	} else {
 		topic := conn.App + conn.Stream
 		if pubsub, ok := srv.getPublisher(topic); ok {
 			sch := pubsub.Subscription()
-			defer pubsub.SubscriptionExit(sch)
+			defer pubsub.SubscriptionClose(sch)
 			if err := conn.handlePlay(sch); err != nil {
-				log.Printf("[%s]-> rtmp play fail(%s)", ncaddr, err)
+				log.Printf("%s", err.Error())
 			}
 		} else {
-			log.Printf("[%s]-> rtmp play fail(%s)", ncaddr, topic+" not found")
+			log.Printf("rtmp %s not found", topic)
+			// 立即退出 defer nc.close
 		}
 
 	}
 }
 
 // 启动Tcp监听
-// 处理golang net Listenconfig 参数
+// 处理golang net ListenConfig 参数 - 做优化
 func (srv *Serve) Listen(address string) error {
 	ln, err := net.Listen("tcp", address)
 	if err != nil {
@@ -78,51 +117,14 @@ func (srv *Serve) Listen(address string) error {
 	}
 }
 
-// 处理全局适配器，通常生成全局文件用
-func (srv *Serve) AdapterRegister(al adapterlisten) {
+// 处理全局适配器，用来监听所有的推送流。
+func (srv *Serve) AdapterRegister(al adapterListen) {
 	srv.mu.Lock()
 	srv.Adapter = append(srv.Adapter, al)
 	srv.mu.Unlock()
 }
 
-//
 func (srv *Serve) SubscriptionTopic(topic string) (*PubSub, bool) {
-	if pubsub, ok := srv.Topic[topic]; ok {
-		return pubsub, true
-	} else {
-		return nil, false
-	}
-}
-
-func (srv *Serve) newPublisher(topic string) *PubSub {
-	srv.mu.Lock()
-	defer srv.mu.Unlock()
-	ps := &PubSub{
-		buffer:     3,
-		timeout:    3 * time.Second,
-		subscriber: make(map[chan Pack]bool),
-		mediaInfo:  metaInfo{},
-	}
-	// 处理全局adapter listen
-	for _, adcb := range srv.Adapter {
-		ch := make(chan Pack)
-		go adcb(topic, ch)
-		ps.subscriber[ch] = true
-	}
-	srv.Topic[topic] = ps
-	return ps
-}
-
-func (srv *Serve) colsePublisher(topic string) {
-	if ps, ok := srv.Topic[topic]; ok {
-		srv.mu.Lock()
-		defer srv.mu.Unlock()
-		ps.Close()
-		delete(srv.Topic, topic)
-	}
-}
-
-func (srv *Serve) getPublisher(topic string) (*PubSub, bool) {
 	if pubsub, ok := srv.Topic[topic]; ok {
 		return pubsub, true
 	} else {
@@ -134,8 +136,7 @@ func (srv *Serve) getPublisher(topic string) (*PubSub, bool) {
 func NewRtmp() *Serve {
 	s := &Serve{
 		Topic:   make(map[string]*PubSub),
-		Adapter: []adapterlisten{},
+		Adapter: []adapterListen{},
 	}
-
 	return s
 }

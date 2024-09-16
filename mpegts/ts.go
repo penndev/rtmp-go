@@ -9,33 +9,30 @@ import (
 
 var defaultH264HZ = 90
 
-func Adapterts(topic string, ch <-chan rtmp.Pack) {
+func Adapter(topic string, ch <-chan rtmp.Pack) {
 	filename := "runtime/" + url.QueryEscape(topic) + ".ts"
-
 	t := &TsPack{}
 	t.NewTs(filename)
 	defer delete(cache, topic)
-	var tslen uint32 // single tsfile sum(dts)
+	var timeMS uint32 // single tsFile sum(dts)
 	for pk := range ch {
 		// gen new ts file (dts 5*second)
-		if tslen > 5000 {
-			var extinf = ExtInf{
-				Inf:  tslen,
+		if timeMS > 5000 {
+			var extInf = ExtInf{
+				Inf:  timeMS,
 				File: filename,
 			}
 			// file add the hls cache
 			if v, ok := cache[topic]; ok {
-				cache[topic] = append(v, extinf)
+				cache[topic] = append(v, extInf)
 			} else {
-				cache[topic] = []ExtInf{extinf}
+				cache[topic] = []ExtInf{extInf}
 			}
 			filename = "runtime/" + url.QueryEscape(topic) + strconv.Itoa(int(t.DTS)) + ".ts"
 			t.NewTs(filename)
-			tslen = 0
+			timeMS = 0
 		}
-
 		t.FlvTag(pk.MessageTypeID, pk.Timestamp, byte(pk.ExtendTimestamp), pk.PayLoad)
-
-		tslen += pk.Timestamp
+		timeMS += pk.Timestamp
 	}
 }

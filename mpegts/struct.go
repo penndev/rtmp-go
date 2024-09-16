@@ -128,7 +128,6 @@ func (t *TsPack) audioTag(tagData []byte) {
 		pes := PES(AudioMark, pts, 0)
 		t.toPack(AudioMark, append(pes, adts...))
 	}
-
 }
 
 func (t *TsPack) FlvTag(tagType byte, timeStreamp uint32, timeStreampExtended byte, tagData []byte) {
@@ -154,5 +153,4 @@ func (t *TsPack) NewTs(filename string) {
 	if len(t.IDR) > 0 {
 		t.videoTag(t.IDR)
 	}
-
 }

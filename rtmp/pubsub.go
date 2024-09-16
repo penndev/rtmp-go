@@ -52,6 +52,7 @@ func (ps *PubSub) Publish(pk Pack) {
 	}
 }
 
+// 中途订阅。
 func (ps *PubSub) Subscription() chan Pack {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
@@ -66,7 +67,8 @@ func (ps *PubSub) Subscription() chan Pack {
 	return ch
 }
 
-func (ps *PubSub) SubscriptionExit(ch chan Pack) {
+// 中途退出订阅。
+func (ps *PubSub) SubscriptionClose(ch chan Pack) {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
 	delete(ps.subscriber, ch)

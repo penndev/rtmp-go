@@ -177,7 +177,6 @@ func (c *Conn) handlePublishing(cb func(Pack)) error {
 func (c *Conn) handlePlay(subscriberCh <-chan Pack) error {
 	clientCh := make(chan error)
 	go func() {
-		// 负责监听客户端断开连接。
 		err := c.handlePublishing(func(pk Pack) {})
 		clientCh <- err
 	}()

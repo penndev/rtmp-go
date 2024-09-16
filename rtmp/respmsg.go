@@ -17,8 +17,8 @@ func respConnect(b bool) []byte {
 	return amf.Encode([]amf.Value{"_result", 1, repVer, repStatus})
 }
 
-func respCreateStream(b bool, transaId int, streamId int) []byte {
-	return amf.Encode([]amf.Value{"_result", transaId, nil, streamId})
+func respCreateStream(_ bool, tranId int, streamId int) []byte {
+	return amf.Encode([]amf.Value{"_result", tranId, nil, streamId})
 }
 
 func respPublish(b bool) []byte {

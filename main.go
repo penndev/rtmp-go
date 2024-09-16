@@ -11,15 +11,16 @@ import (
 
 func main() {
 	rtmpSrv := rtmp.NewRtmp()
-	rtmpSrv.AdapterRegister(flv.Adapterflv)   // 写入flv录播文件
-	rtmpSrv.AdapterRegister(mpegts.Adapterts) // 生成mpegts文件
+	rtmpSrv.AdapterRegister(flv.AdapterFlv) // 写入flv录播文件
+	rtmpSrv.AdapterRegister(mpegts.Adapter) // 生成mpeg-ts文件
 	go func() {
 		http.Handle("/runtime/", http.StripPrefix("/runtime/", http.FileServer(http.Dir("./runtime"))))
-		http.HandleFunc("/play.m3u8", hls.Handlehls(rtmpSrv.SubscriptionTopic))
-		http.HandleFunc("/play.flv", flv.Handleflv(rtmpSrv.SubscriptionTopic)) // http flv 播放
+		http.HandleFunc("/play.m3u8", hls.HandleHls(rtmpSrv.SubscriptionTopic))
+		http.HandleFunc("/play.flv", flv.HandleFlv(rtmpSrv.SubscriptionTopic)) // http flv 播放
 		err := http.ListenAndServe("127.0.0.1:80", nil)
 		panic(err)
 	}()
+	print("Serve listening rtmp://127.0.0.1:1935\n")
 	err := rtmpSrv.Listen("127.0.0.1:1935")
 	panic(err)
 }
