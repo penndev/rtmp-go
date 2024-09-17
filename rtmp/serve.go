@@ -5,7 +5,17 @@ import (
 	"net"
 	"sync"
 	"time"
+
+	"github.com/penndev/rtmp-go/flag"
 )
+
+var logTemplate = `[Notify] 
+Rtmp new Publish [%s]
+- - - - Play List URL - - - -
+rtmp: rtmp://%s
+flv: http://%s
+hls: http://%s
+`
 
 type adapterListen func(string, <-chan Pack)
 
@@ -60,6 +70,9 @@ func (srv *Serve) getPublisher(topic string) (*PubSub, bool) {
 func (srv *Serve) handle(nc net.Conn) {
 	defer func() {
 		nc.Close()
+		if err := recover(); err != nil {
+			log.Printf("%s: %s", "recover: ", err)
+		}
 	}()
 	// check rtmp handshake
 	if err := ServeHandShake(nc); err != nil {
@@ -78,7 +91,13 @@ func (srv *Serve) handle(nc net.Conn) {
 	}
 	if conn.IsPublish {
 		topic := conn.App + conn.Stream
-		log.Printf("[Notify] rtmp push new topic: %s\n- - - - Play List URL - - - -  \nrtmp: rtmp://127.0.0.1:1935/%s  \nflv: http://127.0.0.1:80/play.flv?topic=%s \nhls: http://127.0.0.1:80/play.m3u8?topic=%s", topic, topic, topic, topic)
+		log.Printf(
+			logTemplate,                          // 模板
+			topic,                                // 主题
+			flag.RtmpAddr+"/"+topic,              // rtmp 播放拼接
+			flag.HttpAddr+"/play.flv?top="+topic, // flv播放拼接
+			flag.HttpAddr+"/play.m3u8?top="+topic, // hls播放拼接
+		)
 		pubsub := srv.newPublisher(topic)
 		conn.handlePublishing(func(pk Pack) {
 			pubsub.Publish(pk)
@@ -90,7 +109,7 @@ func (srv *Serve) handle(nc net.Conn) {
 			sch := pubsub.Subscription()
 			defer pubsub.SubscriptionClose(sch)
 			if err := conn.handlePlay(sch); err != nil {
-				log.Printf("%s", err.Error())
+				log.Printf("%s: %s", "play fail", err)
 			}
 		} else {
 			log.Printf("rtmp %s not found", topic)
