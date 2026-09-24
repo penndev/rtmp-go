@@ -5,17 +5,7 @@ import (
 	"net"
 	"sync"
 	"time"
-
-	"github.com/penndev/rtmp-go/flag"
 )
-
-var logTemplate = `[Notify] 
-Rtmp new Publish [%s]
-- - - - Play List URL - - - -
-rtmp: rtmp://%s
-flv: http://%s
-hls: http://%s
-`
 
 type adapterListen func(string, <-chan Pack)
 
@@ -67,37 +57,43 @@ func (srv *Serve) getPublisher(topic string) (*PubSub, bool) {
 	}
 }
 
+// 处理全局适配器，用来监听所有的推送流。
+func (srv *Serve) AdapterRegister(al adapterListen) {
+	srv.mu.Lock()
+	srv.Adapter = append(srv.Adapter, al)
+	srv.mu.Unlock()
+}
+
+func (srv *Serve) SubscriptionTopic(topic string) (*PubSub, bool) {
+	if pubsub, ok := srv.Topic[topic]; ok {
+		return pubsub, true
+	} else {
+		return nil, false
+	}
+}
+
 func (srv *Serve) handle(nc net.Conn) {
+	log.Printf("rtmp handle %s", nc.RemoteAddr())
 	defer func() {
 		nc.Close()
 		if err := recover(); err != nil {
 			log.Printf("%s: %s", "recover: ", err)
 		}
 	}()
+
+	conn := NewConn(nc)
 	// check rtmp handshake
-	if err := ServeHandShake(nc); err != nil {
+	if err := conn.Handshake(); err != nil {
 		log.Printf("%s ServeHandShake fail err[%s]", nc.RemoteAddr(), err.Error())
 		return
 	}
-	// create new rtmp conn
-	conn := NewConn(nc)
-	if err := conn.handleConnect(); err != nil {
-		log.Printf("%s handleConnect fail err[%s]", nc.RemoteAddr(), err.Error())
-		return
-	}
-	if err := conn.handleStream(); err != nil {
+	if err := conn.HandleStream(); err != nil {
 		log.Printf("%s handleStream fail err[%s]", nc.RemoteAddr(), err.Error())
 		return
 	}
 	if conn.IsPublish {
 		topic := conn.App + conn.Stream
-		log.Printf(
-			logTemplate,                          // 模板
-			topic,                                // 主题
-			flag.RtmpAddr+"/"+topic,              // rtmp 播放拼接
-			flag.HttpAddr+"/play.flv?top="+topic, // flv播放拼接
-			flag.HttpAddr+"/play.m3u8?top="+topic, // hls播放拼接
-		)
+
 		pubsub := srv.newPublisher(topic)
 		conn.handlePublishing(func(pk Pack) {
 			pubsub.Publish(pk)
@@ -113,14 +109,12 @@ func (srv *Serve) handle(nc net.Conn) {
 			}
 		} else {
 			log.Printf("rtmp %s not found", topic)
-			// 立即退出 defer nc.close
 		}
 
 	}
 }
 
-// 启动Tcp监听
-// 处理golang net ListenConfig 参数 - 做优化
+// rtmp server listen
 func (srv *Serve) Listen(address string) error {
 	ln, err := net.Listen("tcp", address)
 	if err != nil {
@@ -133,21 +127,6 @@ func (srv *Serve) Listen(address string) error {
 			return err
 		}
 		go srv.handle(nc)
-	}
-}
-
-// 处理全局适配器，用来监听所有的推送流。
-func (srv *Serve) AdapterRegister(al adapterListen) {
-	srv.mu.Lock()
-	srv.Adapter = append(srv.Adapter, al)
-	srv.mu.Unlock()
-}
-
-func (srv *Serve) SubscriptionTopic(topic string) (*PubSub, bool) {
-	if pubsub, ok := srv.Topic[topic]; ok {
-		return pubsub, true
-	} else {
-		return nil, false
 	}
 }
 
