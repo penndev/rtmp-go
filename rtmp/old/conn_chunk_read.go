@@ -6,7 +6,7 @@ import (
 )
 
 // 5.3.1.2. Chunk Message Header
-func (chk *Chunk) readMsgHeader() error {
+func (chk *Conn) readMsgHeader() error {
 	if _, ok := chk.readChunkList[chk.csid]; !ok {
 		chk.readChunkList[chk.csid] = &ChunkMessageHeader{}
 	}

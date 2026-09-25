@@ -10,6 +10,7 @@ import (
 )
 
 type Conn struct {
+	chk *Chunk
 	nc  net.Conn
 	// 读写IO
 	r *bufio.Reader
@@ -19,11 +20,10 @@ type Conn struct {
 	// 不同的 ChunkStreamID 会有不同的 MsgHeader
 	chunkList map[uint32]*ChunkMessageHeader
 
+	App    string
+	Stream string
+	IsPublish bool
 }
-
-
-
-
 
 // 根据返回值处理连接是否继续
 // return true 继续下一步

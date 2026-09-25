@@ -4,72 +4,11 @@ import (
 	"log"
 	"net"
 	"sync"
-	"time"
 )
 
-type adapterListen func(string, <-chan Pack)
-
 type Serve struct {
-	mu    sync.RWMutex
-	Addr  string
-	Topic map[string]*PubSub
-
-	// 全局订阅器，所有新的推流都会被加入到这个队列。
-	Adapter []adapterListen
-}
-
-// 当有新的推送消息时。
-func (srv *Serve) newPublisher(topic string) *PubSub {
-	srv.mu.Lock()
-	defer srv.mu.Unlock()
-	ps := &PubSub{
-		buffer:     3,
-		timeout:    3 * time.Second,
-		subscriber: make(map[chan Pack]bool),
-		mediaInfo:  metaInfo{},
-	}
-	// 处理全局adapter listen
-	for _, adapterCallBack := range srv.Adapter {
-		ch := make(chan Pack)
-		go adapterCallBack(topic, ch)
-		ps.subscriber[ch] = true
-	}
-	srv.Topic[topic] = ps
-	return ps
-}
-
-// 播放客户端主动关闭
-func (srv *Serve) closePublisher(topic string) {
-	if ps, ok := srv.Topic[topic]; ok {
-		srv.mu.Lock()
-		defer srv.mu.Unlock()
-		ps.Close()
-		delete(srv.Topic, topic)
-	}
-}
-
-// 播放客户端获取实例。
-func (srv *Serve) getPublisher(topic string) (*PubSub, bool) {
-	if pubsub, ok := srv.Topic[topic]; ok {
-		return pubsub, true
-	} else {
-		return nil, false
-	}
-}
-
-// 处理全局适配器，用来监听所有的推送流。
-func (srv *Serve) AdapterRegister(al adapterListen) {
-	srv.mu.Lock()
-	srv.Adapter = append(srv.Adapter, al)
-	srv.mu.Unlock()
-}
-
-func (srv *Serve) SubscriptionTopic(topic string) (*PubSub, bool) {
-	if pubsub, ok := srv.Topic[topic]; ok {
-		return pubsub, true
-	} else {
-		return nil, false
-	}
+	mu   sync.RWMutex
+	Addr string
 }
 
 func (srv *Serve) handle(nc net.Conn) {
@@ -91,27 +30,6 @@ func (srv *Serve) handle(nc net.Conn) {
 		log.Printf("%s handleStream fail err[%s]", nc.RemoteAddr(), err.Error())
 		return
 	}
-	if conn.IsPublish {
-		topic := conn.App + conn.Stream
-
-		pubsub := srv.newPublisher(topic)
-		conn.handlePublishing(func(pk Pack) {
-			pubsub.Publish(pk)
-		})
-		srv.closePublisher(topic)
-	} else {
-		topic := conn.App + conn.Stream
-		if pubsub, ok := srv.getPublisher(topic); ok {
-			sch := pubsub.Subscription()
-			defer pubsub.SubscriptionClose(sch)
-			if err := conn.handlePlay(sch); err != nil {
-				log.Printf("%s: %s", "play fail", err)
-			}
-		} else {
-			log.Printf("rtmp %s not found", topic)
-		}
-
-	}
 }
 
 // rtmp server listen
@@ -132,9 +50,6 @@ func (srv *Serve) Listen(address string) error {
 
 // create new rtmp serve
 func NewRtmp() *Serve {
-	s := &Serve{
-		Topic:   make(map[string]*PubSub),
-		Adapter: []adapterListen{},
-	}
+	s := &Serve{}
 	return s
 }
