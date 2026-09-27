@@ -13,14 +13,14 @@ func roundTrip3(t *testing.T, v amf.Value) amf.Value {
 	if err != nil {
 		t.Fatalf("Encode3(%T): %v", v, err)
 	}
-	got, rest, err := amf.Decode3(b)
+	vals, err := amf.Decode3(b)
 	if err != nil {
 		t.Fatalf("Decode3(%T): %v\nhex=%x", v, err, b)
 	}
-	if len(rest) != 0 {
-		t.Fatalf("Decode3(%T): leftover %d bytes", v, len(rest))
+	if len(vals) != 1 {
+		t.Fatalf("Decode3(%T): got %d values %#v", v, len(vals), vals)
 	}
-	return got
+	return vals[0]
 }
 
 func TestAMF3_Null(t *testing.T) {
@@ -70,7 +70,7 @@ func TestAMF3_String(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	vals, err := amf.Decode3All(b)
+	vals, err := amf.Decode3(b)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,16 +80,43 @@ func TestAMF3_String(t *testing.T) {
 }
 
 func TestAMF3_XMLDocument(t *testing.T) {
-	in := amf.XMLDocument("<a/>")
-	if got := roundTrip3(t, in); got != in {
-		t.Fatalf("got %#v", got)
+	in := amf.XMLDocument(`<?xml version="1.0"?>
+<root>
+  <item id="1">hello</item>
+</root>`)
+	b, err := amf.Encode3(in)
+	if err != nil {
+		t.Fatalf("Encode3: %v", err)
+	}
+	vals, err := amf.Decode3(b)
+	if err != nil {
+		t.Fatalf("Decode3: %v\nhex=%x", err, b)
+	}
+	if len(vals) != 1 {
+		t.Fatalf("got %d values %#v", len(vals), vals)
+	}
+	got, ok := vals[0].(amf.XMLDocument)
+	if !ok || got != in {
+		t.Fatalf("got %#v", vals[0])
 	}
 }
 
 func TestAMF3_XML(t *testing.T) {
-	in := amf.XML("<>")
-	if got := roundTrip3(t, in); got != in {
-		t.Fatalf("got %#v", got)
+	in := amf.XML(`<node id="1">hello</node>`)
+	b, err := amf.Encode3(in)
+	if err != nil {
+		t.Fatalf("Encode3: %v", err)
+	}
+	vals, err := amf.Decode3(b)
+	if err != nil {
+		t.Fatalf("Decode3: %v\nhex=%x", err, b)
+	}
+	if len(vals) != 1 {
+		t.Fatalf("got %d values %#v", len(vals), vals)
+	}
+	got, ok := vals[0].(amf.XML)
+	if !ok || got != in {
+		t.Fatalf("got %#v", vals[0])
 	}
 }
 
@@ -220,7 +247,7 @@ func TestAMF3_ViaAMF0Marker(t *testing.T) {
 	}
 	raw := append(cmd, b...)
 	raw = append(raw, amf.AMF0Null)
-	vals, err := amf.Decode(raw)
+	vals, err := amf.Decode0(raw)
 	if err != nil {
 		t.Fatal(err)
 	}

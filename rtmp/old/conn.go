@@ -64,7 +64,7 @@ func (c *Conn) handleConnect() error {
 		if pk.MessageTypeID != 20 {
 			return errors.New("netConnectionCommand err: cant handle type id" + fmt.Sprint(pk.MessageTypeID))
 		}
-		item, err := amf.Decode(pk.PayLoad)
+		item, err := amf.Decode0(pk.PayLoad)
 		if err != nil {
 			return err
 		}
@@ -118,7 +118,7 @@ func (c *Conn) HandleStream() error {
 		if pk.MessageTypeID != 20 {
 			return errors.New("netStreamCommand err: cant handle type id" + fmt.Sprint(pk.MessageTypeID))
 		}
-		item, err := amf.Decode(pk.PayLoad)
+		item, err := amf.Decode0(pk.PayLoad)
 		if err != nil {
 			return err
 		}
@@ -170,7 +170,7 @@ func (c *Conn) handlePublishing(cb func(Pack)) error {
 			// fmt.Println("收到消息->", pk.MessageTypeID)
 			cb(pk)
 		case 20:
-			item, err := amf.Decode(pk.PayLoad)
+			item, err := amf.Decode0(pk.PayLoad)
 			if err != nil {
 				return err
 			}

@@ -13,14 +13,14 @@ func roundTrip0(t *testing.T, v amf.Value) amf.Value {
 	if err != nil {
 		t.Fatalf("Encode0(%T): %v", v, err)
 	}
-	got, rest, err := amf.Decode0(b)
+	vals, err := amf.Decode0(b)
 	if err != nil {
 		t.Fatalf("Decode0(%T): %v", v, err)
 	}
-	if len(rest) != 0 {
-		t.Fatalf("Decode0(%T): leftover %d bytes", v, len(rest))
+	if len(vals) != 1 {
+		t.Fatalf("Decode0(%T): got %d values %#v", v, len(vals), vals)
 	}
-	return got
+	return vals[0]
 }
 
 func TestAMF0_Null(t *testing.T) {
@@ -106,9 +106,24 @@ func TestAMF0_Date(t *testing.T) {
 }
 
 func TestAMF0_XMLDocument(t *testing.T) {
-	in := amf.XMLDocument("<a/>")
-	if got := roundTrip0(t, in); got != in {
-		t.Fatalf("got %#v", got)
+	in := amf.XMLDocument(`<?xml version="1.0"?>
+<root>
+  <item id="1">hello</item>
+</root>`)
+	b, err := amf.Encode0(in)
+	if err != nil {
+		t.Fatalf("Encode0: %v", err)
+	}
+	vals, err := amf.Decode0(b)
+	if err != nil {
+		t.Fatalf("Decode0: %v", err)
+	}
+	if len(vals) != 1 {
+		t.Fatalf("got %d values %#v", len(vals), vals)
+	}
+	got, ok := vals[0].(amf.XMLDocument)
+	if !ok || got != in {
+		t.Fatalf("got %#v", vals[0])
 	}
 }
 
@@ -135,7 +150,7 @@ func TestAMF0_Reference(t *testing.T) {
 		t.Fatal(err)
 	}
 	raw := append(append([]byte{}, objBytes...), amf.AMF0Reference, 0x00, 0x00)
-	vals, err := amf.Decode(raw)
+	vals, err := amf.Decode0(raw)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,9 +163,9 @@ func TestAMF0_Reference(t *testing.T) {
 
 func TestAMF0_AVMPlus(t *testing.T) {
 	b := []byte{amf.AMF0AVMPlus, amf.AMF3True}
-	v, _, err := amf.Decode0(b)
-	if err != nil || v != true {
-		t.Fatalf("got %v err %v", v, err)
+	vals, err := amf.Decode0(b)
+	if err != nil || len(vals) != 1 || vals[0] != true {
+		t.Fatalf("got %#v err %v", vals, err)
 	}
 }
 
@@ -162,7 +177,7 @@ func TestAMF0_ConnectCommand(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	vals, err := amf.Decode(payload)
+	vals, err := amf.Decode0(payload)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -156,6 +156,7 @@ func (chk *Chunk) readMessage() (Message, error) {
 	}
 }
 
+// rtmp message filter control messages
 func (chk *Chunk) Read() (*Message, error) {
 	for {
 		msg, err := chk.readMessage()

@@ -7,8 +7,8 @@ import (
 	"math"
 )
 
-// Decode3All reads all consecutive AMF3 values from b.
-func Decode3All(b []byte) ([]Value, error) {
+// Decode3 reads all consecutive AMF3 values from b.
+func Decode3(b []byte) ([]Value, error) {
 	d := &Decoder{data: b}
 	var out []Value
 	for d.off < len(d.data) {
@@ -19,16 +19,6 @@ func Decode3All(b []byte) ([]Value, error) {
 		out = append(out, v)
 	}
 	return out, nil
-}
-
-// Decode3 reads one AMF3 value from b and returns remaining bytes.
-func Decode3(b []byte) (Value, []byte, error) {
-	d := &Decoder{data: b}
-	v, err := d.Decode3()
-	if err != nil {
-		return nil, b, err
-	}
-	return v, d.data[d.off:], nil
 }
 
 // Encode3All encodes vals as consecutive AMF3 values.

@@ -2,8 +2,11 @@ package rtmp
 
 import (
 	"bufio"
+	"fmt"
 	"log"
 	"net"
+
+	"github.com/penndev/rtmp/amf"
 )
 
 type Conn struct {
@@ -16,6 +19,24 @@ func (c *Conn) HandleStream() error {
 	if err != nil {
 		return err
 	}
+
+	switch msg.MessageType {
+	case AMF0CommandMessage:
+		values, err := amf.Decode0(msg.PayLoad)
+		if err != nil {
+			return err
+		}
+		log.Println("read message amf0 command message", values)
+	case AMF3CommandMessage:
+		values, err := amf.Decode3(msg.PayLoad)
+		if err != nil {
+			return err
+		}
+		log.Println("read message amf3 command message", values)
+	default:
+		return fmt.Errorf("unknown message type: %d", msg.MessageType)
+	}
+
 	log.Println("read message", msg.MessageType)
 	return nil
 }

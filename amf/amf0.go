@@ -7,9 +7,9 @@ import (
 	"math"
 )
 
-// Decode reads all consecutive AMF0 values from b.
+// Decode0 reads all consecutive AMF0 values from b.
 // AMF0AVMPlus (0x11) switches to AMF3 for the next value.
-func Decode(b []byte) ([]Value, error) {
+func Decode0(b []byte) ([]Value, error) {
 	d := &Decoder{data: b}
 	var out []Value
 	for d.off < len(d.data) {
@@ -20,16 +20,6 @@ func Decode(b []byte) ([]Value, error) {
 		out = append(out, v)
 	}
 	return out, nil
-}
-
-// Decode0 reads one AMF0 value from b and returns remaining bytes.
-func Decode0(b []byte) (Value, []byte, error) {
-	d := &Decoder{data: b}
-	v, err := d.Decode0()
-	if err != nil {
-		return nil, b, err
-	}
-	return v, d.data[d.off:], nil
 }
 
 // Decoder holds byte cursor and AMF0/AMF3 reference tables for one message.
