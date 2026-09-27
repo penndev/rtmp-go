@@ -21,12 +21,17 @@ const VERSION = 0x03
 //  chunk.
 const DEFAULT_CHUNK_SIZE = 128
 
-// MessageType 消息类型
-// 见 RTMP 规范 5.4 / 6.x / 7.x
 type MessageType byte
 
 const (
 	// 5.4. Protocol Control Messages
+	// RTMP Chunk Stream uses message type IDs 1, 2, 3, 5, and 6 for
+	// protocol control messages. These messages contain information needed
+	// by the RTMP Chunk Stream protocol.
+	// These protocol control messages MUST have message stream ID 0 (known
+	// as the control stream) and be sent in chunk stream ID 2. Protocol
+	// control messages take effect as soon as they are received; their
+	// timestamps are ignored.
 	SetChunkSize              MessageType = 1
 	AbortMessage              MessageType = 2
 	Acknowledgement           MessageType = 3

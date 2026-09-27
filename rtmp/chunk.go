@@ -5,15 +5,14 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
-	"log"
 )
 
 type MessageHeader struct {
-	Timestamp       uint32 // 3 byte
-	MessageLength   uint32 // 3 byte
+	Timestamp       uint32      // 3 byte
+	MessageLength   uint32      // 3 byte
 	MessageType     MessageType // 1 byte
-	MessageStreamID uint32 // 4 byte
-	ExtendTimestamp uint32 // 4 byte
+	MessageStreamID uint32      // 4 byte
+	ExtendTimestamp uint32      // 4 byte
 }
 
 type Message struct {
@@ -164,19 +163,30 @@ func (chk *Chunk) Read() (*Message, error) {
 			return nil, err
 		}
 
-		// 5.4. Protocol Control Messages
-		// RTMP Chunk Stream uses message type IDs 1, 2, 3, 5, and 6 for
-		// protocol control messages. These messages contain information needed
-		// by the RTMP Chunk Stream protocol.
-		// These protocol control messages MUST have message stream ID 0 (known
-		// as the control stream) and be sent in chunk stream ID 2. Protocol
-		// control messages take effect as soon as they are received; their
-		// timestamps are ignored.
 		switch msg.MessageType {
 		case SetChunkSize:
 			// 5.4.1. Set Chunk Size (1)
-			chk.readChunkSize = binary.BigEndian.Uint32(msg.PayLoad)
-			log.Println("set readChunkSize", chk.readChunkSize)
+			// chunk size (31 bits): Valid sizes are 1 to 2147483647 (0x7FFFFFFF).
+			// The first bit MUST be zero.
+			if len(msg.PayLoad) < 4 {
+				return nil, errors.New("SetChunkSize: payload too short")
+			}
+			size := binary.BigEndian.Uint32(msg.PayLoad) & 0x7FFFFFFF
+			if size < 1 {
+				return nil, errors.New("SetChunkSize: size must be at least 1")
+			}
+			chk.readChunkSize = size
+		case AbortMessage:
+			// 5.4.2. Abort Message (2)
+			// chunk stream ID (32 bits): discard the partially received message.
+			if len(msg.PayLoad) < 4 {
+				return nil, errors.New("AbortMessage: payload too short")
+			}
+			csid := int(binary.BigEndian.Uint32(msg.PayLoad))
+			if m, ok := chk.readStreamList[csid]; ok {
+				m.PayLoad = nil
+			}
+
 		default:
 			return &msg, nil
 		}

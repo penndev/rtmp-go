@@ -64,11 +64,14 @@ func (c *Conn) handleConnect() error {
 		if pk.MessageTypeID != 20 {
 			return errors.New("netConnectionCommand err: cant handle type id" + fmt.Sprint(pk.MessageTypeID))
 		}
-		item := amf.Decode(pk.PayLoad)
+		item, err := amf.Decode(pk.PayLoad)
+		if err != nil {
+			return err
+		}
 		switch item[0] {
 		case "connect":
 			read = 1
-			media, ok := item[2].(map[string]amf.Value)
+			media, ok := amf.AsObject(item[2])
 			if !ok {
 				return errors.New("netConnectionCommand connect err:) catn find media")
 			}
@@ -115,7 +118,10 @@ func (c *Conn) HandleStream() error {
 		if pk.MessageTypeID != 20 {
 			return errors.New("netStreamCommand err: cant handle type id" + fmt.Sprint(pk.MessageTypeID))
 		}
-		item := amf.Decode(pk.PayLoad)
+		item, err := amf.Decode(pk.PayLoad)
+		if err != nil {
+			return err
+		}
 		switch item[0] {
 		case "publish":
 			streamId, ok := item[1].(float64)
@@ -164,7 +170,10 @@ func (c *Conn) handlePublishing(cb func(Pack)) error {
 			// fmt.Println("收到消息->", pk.MessageTypeID)
 			cb(pk)
 		case 20:
-			item := amf.Decode(pk.PayLoad)
+			item, err := amf.Decode(pk.PayLoad)
+			if err != nil {
+				return err
+			}
 			switch item[0] {
 			case "FCUnpublish":
 			case "deleteStream":
@@ -204,11 +213,10 @@ func (c *Conn) handlePlay(subscriberCh <-chan Pack) error {
 
 func NewConn(nc net.Conn) *Conn {
 	return &Conn{
-		chk: newChunk(nc),
-		nc:  nc,
-
-		r: bufio.NewReader(c),
-		w: bufio.NewWriter(c),
-		chunkList: make(map[uint32]*ChunkMessageHeader)
+		chk:       newChunk(nc),
+		nc:        nc,
+		r:         bufio.NewReader(nc),
+		w:         bufio.NewWriter(nc),
+		chunkList: make(map[uint32]*ChunkMessageHeader),
 	}
 }
