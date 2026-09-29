@@ -17,6 +17,18 @@ type Serve struct {
 	meta map[string]*Message
 }
 
+func (srv *Serve) setMeta(path string, msg *Message) {
+	srv.mu.Lock()
+	srv.meta[path] = msg
+	srv.mu.Unlock()
+}
+
+func (srv *Serve) deleteMeta(path string) {
+	srv.mu.Lock()
+	delete(srv.meta, path)
+	srv.mu.Unlock()
+}
+
 func (srv *Serve) handle(nc net.Conn) {
 	log.Printf("rtmp handle %s", nc.RemoteAddr())
 	defer func() {
@@ -65,7 +77,6 @@ func (srv *Serve) handle(nc net.Conn) {
 		log.Printf("%s CreateStreamReply fail err[%s]", nc.RemoteAddr(), err.Error())
 		return
 	}
-	log.Printf("app=%s stream=%s", conn.App, conn.Stream)
 
 	for {
 		msg, err := conn.Read()
@@ -103,6 +114,8 @@ func (srv *Serve) handle(nc net.Conn) {
 			}
 			if err := srv.handlePublish(conn); err != nil {
 				log.Printf("%s handlePublish fail err[%s]", nc.RemoteAddr(), err.Error())
+			} else {
+				log.Printf("%s handlePublish Finsh", nc.RemoteAddr())
 			}
 			return
 		case "play":
@@ -113,6 +126,8 @@ func (srv *Serve) handle(nc net.Conn) {
 			}
 			if err := srv.handlePlay(conn); err != nil {
 				log.Printf("%s handlePlay fail err[%s]", nc.RemoteAddr(), err.Error())
+			} else {
+				log.Printf("%s handlePlay Finsh", nc.RemoteAddr())
 			}
 			return
 		default:

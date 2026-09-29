@@ -58,7 +58,10 @@ func (c *Conn) ConnectReply(cmd *ConnectCommand, success bool) error {
 		return err
 	}
 	// Command messages (20): typically chunk stream ID 3, message stream ID 0
-	return c.sendMsg(AMF0CommandMessage, 3, 0, payload)
+	return c.Write(3, 0, &Message{
+		MessageHeader: MessageHeader{MessageType: AMF0CommandMessage},
+		PayLoad:       payload,
+	})
 }
 
 // 5.4.1. Set Chunk Size (1)
@@ -77,7 +80,10 @@ func (c *Conn) SetChunkSize(size uint32) error {
 	binary.BigEndian.PutUint32(payload, size)
 	// Protocol control messages MUST have message stream ID 0 and be
 	// sent in chunk stream ID 2 (5.4).
-	if err := c.sendMsg(SetChunkSize, 2, 0, payload); err != nil {
+	if err := c.Write(2, 0, &Message{
+		MessageHeader: MessageHeader{MessageType: SetChunkSize},
+		PayLoad:       payload,
+	}); err != nil {
 		return err
 	}
 	c.writeChunkSize = size
@@ -90,7 +96,10 @@ func (c *Conn) SetChunkSize(size uint32) error {
 func (c *Conn) SetWindowAcknowledgementSize(size uint32) error {
 	payload := make([]byte, 4)
 	binary.BigEndian.PutUint32(payload, size)
-	return c.sendMsg(WindowAcknowledgementSize, 2, 0, payload)
+	return c.Write(2, 0, &Message{
+		MessageHeader: MessageHeader{MessageType: WindowAcknowledgementSize},
+		PayLoad:       payload,
+	})
 }
 
 // 5.4.5. Set Peer Bandwidth (6)
@@ -101,7 +110,10 @@ func (c *Conn) SetBandwidth(size uint32) error {
 	payload := make([]byte, 5)
 	binary.BigEndian.PutUint32(payload[:4], size)
 	payload[4] = 2 // Dynamic
-	return c.sendMsg(SetPeerBandwidth, 2, 0, payload)
+	return c.Write(2, 0, &Message{
+		MessageHeader: MessageHeader{MessageType: SetPeerBandwidth},
+		PayLoad:       payload,
+	})
 }
 
 func (c *Conn) CreateStream() (*CreateStreamCommand, error) {
@@ -159,7 +171,10 @@ func (c *Conn) CreateStreamReply(cmd *CreateStreamCommand, streamID float64) err
 		return err
 	}
 	// createStream uses the default communication channel (message stream ID 0)
-	return c.sendMsg(AMF0CommandMessage, 3, 0, payload)
+	return c.Write(3, 0, &Message{
+		MessageHeader: MessageHeader{MessageType: AMF0CommandMessage},
+		PayLoad:       payload,
+	})
 }
 
 // 7.2.2.6. publish — server response onStatus
@@ -177,7 +192,10 @@ func (c *Conn) PublishReply(success bool) error {
 	if err != nil {
 		return err
 	}
-	return c.sendMsg(AMF0CommandMessage, 3, uint32(c.StreamID), payload)
+	return c.Write(3, uint32(c.StreamID), &Message{
+		MessageHeader: MessageHeader{MessageType: AMF0CommandMessage},
+		PayLoad:       payload,
+	})
 }
 
 // 7.2.2.1. play — server response onStatus
@@ -195,14 +213,20 @@ func (c *Conn) PlayReply(success bool) error {
 	if err != nil {
 		return err
 	}
-	return c.sendMsg(AMF0CommandMessage, 3, uint32(c.StreamID), payload)
+	return c.Write(3, uint32(c.StreamID), &Message{
+		MessageHeader: MessageHeader{MessageType: AMF0CommandMessage},
+		PayLoad:       payload,
+	})
 }
 
 // 6.2. User Control Messages — Stream Begin (event type 0)
 func (c *Conn) StreamBegin(streamID uint32) error {
 	payload := make([]byte, 6)
 	binary.BigEndian.PutUint32(payload[2:], streamID)
-	return c.sendMsg(UserControl, 2, 0, payload)
+	return c.Write(2, 0, &Message{
+		MessageHeader: MessageHeader{MessageType: UserControl},
+		PayLoad:       payload,
+	})
 }
 
 // 6.2. User Control Messages — Stream EOF (event type 1)
@@ -210,7 +234,10 @@ func (c *Conn) StreamEOF(streamID uint32) error {
 	payload := make([]byte, 6)
 	binary.BigEndian.PutUint16(payload[:2], 1)
 	binary.BigEndian.PutUint32(payload[2:], streamID)
-	return c.sendMsg(UserControl, 2, 0, payload)
+	return c.Write(2, 0, &Message{
+		MessageHeader: MessageHeader{MessageType: UserControl},
+		PayLoad:       payload,
+	})
 }
 
 // NetStream.Play.Stop — notify player the stream has ended
@@ -224,10 +251,11 @@ func (c *Conn) PlayStop() error {
 	if err != nil {
 		return err
 	}
-	return c.sendMsg(AMF0CommandMessage, 3, uint32(c.StreamID), payload)
+	return c.Write(3, uint32(c.StreamID), &Message{
+		MessageHeader: MessageHeader{MessageType: AMF0CommandMessage},
+		PayLoad:       payload,
+	})
 }
-
-
 
 func NewConn(nc net.Conn) *Conn {
 	return &Conn{

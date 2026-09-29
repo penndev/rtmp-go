@@ -1,7 +1,6 @@
 package rtmp
 
 import (
-	"errors"
 	"log"
 )
 
@@ -23,7 +22,7 @@ func (srv *Serve) handlePlay(conn *Conn) error {
 	meta := srv.meta[path]
 	srv.mu.RUnlock()
 	if meta != nil {
-		if err := conn.sendMessage(5, sid, meta); err != nil {
+		if err := conn.Write(5, sid, meta); err != nil {
 			return err
 		}
 	}
@@ -47,7 +46,7 @@ func (srv *Serve) handlePlay(conn *Conn) error {
 			if !ok {
 				_ = conn.StreamEOF(sid)
 				_ = conn.PlayStop()
-				return errors.New("publisher closed")
+				return nil
 			}
 			msg, ok := m.Data.(*Message)
 			if !ok || msg == nil {
@@ -60,7 +59,7 @@ func (srv *Serve) handlePlay(conn *Conn) error {
 			case Video:
 				csid = 6
 			}
-			if err := conn.sendMessage(csid, sid, msg); err != nil {
+			if err := conn.Write(csid, sid, msg); err != nil {
 				return err
 			}
 		case err := <-errCh:

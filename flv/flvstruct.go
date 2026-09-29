@@ -5,7 +5,7 @@ import (
 	"io"
 )
 
-//FLV header
+// FLV header
 const (
 	// 固定文件头 0x46 0x4c 0x56
 	Signature string = "FLV"
@@ -13,7 +13,7 @@ const (
 	Version byte = 1
 )
 
-//FLV Flags  掩码位判断视频包含的内容。
+// FLV Flags  掩码位判断视频包含的内容。
 // "00000001" 1-只有视频
 // "00000100" 4-只有音频
 // "00000101" 5-有视频有音频
@@ -22,12 +22,10 @@ var Flags = map[string]byte{"v": 1, "a": 4, "av": 5}
 // 固定偏移位置
 var DataOffset = []byte{0, 0, 0, 9}
 
-//FLV 结构体
+// FLV 结构体
 type FLV struct {
 	// 上一个FLV Tag size
 	PreviousTagSize uint32
-	// FLV存储时间为累加时间
-	Timestamp uint32
 
 	w io.Writer
 }
@@ -59,14 +57,12 @@ func NewHeader(flags string) []byte {
 	return hd
 }
 
-// FLV 写入Tag Byte
-func (flv *FLV) TagWrite(tagType byte, timeStreamp uint32, timeStreampExtended byte, tagData []byte) {
+// FLV 写入Tag（timestamp 为绝对毫秒）
+func (flv *FLV) TagWrite(tagType byte, timestamp uint32, tagData []byte) {
 	var tag Tag
 	tag.tagType = tagType
-	flv.Timestamp += timeStreamp
-	tag.timeStreamp = flv.Timestamp
-	// 写真实的拓展时间 - 还未实现
-	tag.timeStreampExtended = timeStreampExtended
+	tag.timeStreamp = timestamp & 0xFFFFFF
+	tag.timeStreampExtended = byte(timestamp >> 24)
 	tag.tagData = tagData
 	flv.w.Write(tag.genByte())
 }

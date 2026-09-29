@@ -1,10 +1,10 @@
 package rtmp
 
 import (
-	"fmt"
 	"log"
 
 	"github.com/penndev/rtmp/amf"
+	"github.com/penndev/rtmp/flv"
 	"github.com/penndev/rtmp/pubsub"
 )
 
@@ -19,14 +19,13 @@ func (srv *Serve) handlePublish(conn *Conn) error {
 
 	path := conn.App + "/" + conn.Stream
 	log.Printf("%s publishing path=%s", conn.nc.RemoteAddr(), path)
-
 	topic := srv.broker.Topic(path)
 	defer func() {
 		topic.Close()
-		srv.mu.Lock()
-		delete(srv.meta, path)
-		srv.mu.Unlock()
+		srv.deleteMeta(path)
 	}()
+
+	go flv.AdapterFlv(path, topic.Subscribe())
 
 	for {
 		msg, err := conn.Read()
@@ -37,9 +36,8 @@ func (srv *Serve) handlePublish(conn *Conn) error {
 		case Audio, Video:
 			topic.Publish(&pubsub.Message{Data: msg})
 		case AMF0DataMessage, AMF3DataMessage:
-			srv.mu.Lock()
-			srv.meta[path] = msg
-			srv.mu.Unlock()
+			topic.Publish(&pubsub.Message{Data: msg})
+			srv.setMeta(path, msg)
 		case AMF0CommandMessage, AMF3CommandMessage:
 			var values []amf.Value
 			switch msg.MessageType {
@@ -57,7 +55,7 @@ func (srv *Serve) handlePublish(conn *Conn) error {
 			cmd, _ := values[0].(string)
 			switch cmd {
 			case "FCUnpublish", "deleteStream":
-				return fmt.Errorf("publisher closed: %s", cmd)
+				return nil
 			default:
 				log.Printf("publish command ignored: %s", cmd)
 			}

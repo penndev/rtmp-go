@@ -8,17 +8,25 @@ import (
 )
 
 type MessageHeader struct {
-	Timestamp       uint32      // 3 byte
+	Timestamp       uint32      // 绝对时间（读完一条消息后）
 	MessageLength   uint32      // 3 byte
 	MessageType     MessageType // 1 byte
 	MessageStreamID uint32      // 4 byte
 	ExtendTimestamp uint32      // 4 byte
+
+	// 同一 csid 上跨消息保留的读状态
+	TimestampDelta     uint32 // 上一次增量；fmt 0 后为 0
+	HasExtendTimestamp bool   // 上一片是否带了 5.3.1.3 扩展时间戳
 }
 
 type Message struct {
 	MessageHeader
 	PayLoad []byte
 }
+
+func (m *Message) TagType() byte        { return byte(m.MessageType) }
+func (m *Message) TagTimestamp() uint32 { return m.Timestamp }
+func (m *Message) TagData() []byte      { return m.PayLoad }
 
 type Chunk struct {
 	r *bufio.Reader
@@ -52,7 +60,10 @@ func (chk *Chunk) read(l int) ([]byte, error) {
 	if chk.ackWindowSize > 0 && chk.bytesReceived-chk.lastAckBytes >= chk.ackWindowSize {
 		payload := make([]byte, 4)
 		binary.BigEndian.PutUint32(payload, chk.bytesReceived)
-		if err := chk.sendMsg(Acknowledgement, 2, 0, payload); err != nil {
+		if err := chk.Write(2, 0, &Message{
+			MessageHeader: MessageHeader{MessageType: Acknowledgement},
+			PayLoad:       payload,
+		}); err != nil {
 			return nil, err
 		}
 		chk.lastAckBytes = chk.bytesReceived
@@ -68,47 +79,66 @@ func (chk *Chunk) write(buf []byte) error {
 }
 
 // 5.3.1.2. Chunk Message Header
+// fmt 0 的 3 字节是绝对时间；fmt 1/2 是相对上一条的增量；fmt 3 不带时间戳，沿用上一次增量。
+// 同一条消息拆成多 chunk 时，只有第一片更新时间，后面的 fmt 3 不能再加一次。
 func (chk *Chunk) readMsgHeader(fmt int, csid int) error {
 	if _, ok := chk.readStreamList[csid]; !ok {
 		chk.readStreamList[csid] = &Message{}
 	}
-	//fmt type=[0 1 2]  have Timestamp
-	if fmt < 3 {
-		buf, err := chk.read(3)
-		if err != nil {
-			return err
-		}
-		chk.readStreamList[csid].Timestamp = uint32(buf[0])<<16 | uint32(buf[1])<<8 | uint32(buf[2])
-	}
-	//fmt type [0 1] MessageLength MessageType
-	if fmt < 2 {
-		buf, err := chk.read(3)
-		if err != nil {
-			return err
-		}
-		chk.readStreamList[csid].MessageLength = uint32(buf[0])<<16 | uint32(buf[1])<<8 | uint32(buf[2])
 
-		buf, err = chk.read(1)
+	timestamp := chk.readStreamList[csid].TimestampDelta
+	ext := chk.readStreamList[csid].HasExtendTimestamp
+	if fmt <= 2 {
+		buf, err := chk.read(3)
 		if err != nil {
 			return err
 		}
-		chk.readStreamList[csid].MessageType = MessageType(buf[0])
-	}
-	//fmt type 0 MessageStreamID
-	if fmt < 1 {
-		buf, err := chk.read(4)
-		if err != nil {
-			return err
+		timestamp = uint32(buf[0])<<16 | uint32(buf[1])<<8 | uint32(buf[2])
+		ext = timestamp == 0xFFFFFF
+
+		//fmt type [0 1] MessageLength MessageType
+		if fmt <= 1 {
+			buf, err = chk.read(3)
+			if err != nil {
+				return err
+			}
+			chk.readStreamList[csid].MessageLength = uint32(buf[0])<<16 | uint32(buf[1])<<8 | uint32(buf[2])
+
+			buf, err = chk.read(1)
+			if err != nil {
+				return err
+			}
+			chk.readStreamList[csid].MessageType = MessageType(buf[0])
 		}
-		chk.readStreamList[csid].MessageStreamID = binary.LittleEndian.Uint32(buf)
+		//fmt type 0 MessageStreamID
+		if fmt == 0 {
+			buf, err = chk.read(4)
+			if err != nil {
+				return err
+			}
+			chk.readStreamList[csid].MessageStreamID = binary.LittleEndian.Uint32(buf)
+		}
 	}
 	// 5.3.1.3. Extended Timestamp
-	if chk.readStreamList[csid].Timestamp == 0xFFFFFF {
+	if ext {
 		buf, err := chk.read(4)
 		if err != nil {
 			return err
 		}
-		chk.readStreamList[csid].ExtendTimestamp = binary.BigEndian.Uint32(buf)
+		timestamp = binary.BigEndian.Uint32(buf)
+	}
+
+	// 这条消息已经读了一部分：后续 chunk 只把 extended timestamp 从流里消费掉
+	if len(chk.readStreamList[csid].PayLoad) > 0 {
+		return nil
+	}
+
+	chk.readStreamList[csid].HasExtendTimestamp = ext
+	if fmt == 0 {
+		chk.readStreamList[csid].Timestamp = timestamp
+		chk.readStreamList[csid].TimestampDelta = 0
+	} else {
+		chk.readStreamList[csid].TimestampDelta = timestamp
 	}
 	return nil
 }
@@ -172,6 +202,7 @@ func (chk *Chunk) readMessage() (Message, error) {
 		chk.readStreamList[csid].PayLoad = append(chk.readStreamList[csid].PayLoad, load...)
 
 		if uint32(len(chk.readStreamList[csid].PayLoad)) >= chk.readStreamList[csid].MessageLength {
+			chk.readStreamList[csid].Timestamp += chk.readStreamList[csid].TimestampDelta
 			msg := *chk.readStreamList[csid]
 			chk.readStreamList[csid].PayLoad = nil
 			return msg, nil
@@ -275,27 +306,12 @@ func writeMsgHeader(fmt byte, h MessageHeader) []byte {
 	return buf
 }
 
-// sendMsg 拼完整后一次写出（csid 须 >= 2）
-func (chk *Chunk) sendMsg(msgType MessageType, csid int, streamID uint32, payload []byte) error {
-	return chk.sendMessage(csid, streamID, &Message{
-		MessageHeader: MessageHeader{
-			MessageType:     msgType,
-			MessageLength:   uint32(len(payload)),
-			MessageStreamID: streamID,
-		},
-		PayLoad: payload,
-	})
-}
-
-// sendMessage writes one RTMP message with absolute timestamp (always fmt 0).
-func (chk *Chunk) sendMessage(csid int, streamID uint32, msg *Message) error {
+// Write 写出一条 RTMP message（绝对时间戳，fmt 0；csid 须 >= 2）
+func (chk *Chunk) Write(csid int, streamID uint32, msg *Message) error {
 	if csid < 2 {
-		return errors.New("sendMessage: csid must be >= 2")
+		return errors.New("Write: csid must be >= 2")
 	}
 	abs := msg.Timestamp
-	if msg.Timestamp == 0xFFFFFF {
-		abs = msg.ExtendTimestamp
-	}
 	h := MessageHeader{
 		MessageType:     msg.MessageType,
 		MessageLength:   uint32(len(msg.PayLoad)),
@@ -321,6 +337,12 @@ func (chk *Chunk) sendMessage(csid int, streamID uint32, msg *Message) error {
 			out = append(out, writeMsgHeader(0, h)...)
 		} else {
 			out = append(out, writeBasicHeader(3, csid)...)
+			// 5.3.1.3: 前面的 fmt 0 带了 extended timestamp，后续 fmt 3 也要带
+			if h.Timestamp >= 0xFFFFFF {
+				ext := make([]byte, 4)
+				binary.BigEndian.PutUint32(ext, h.ExtendTimestamp)
+				out = append(out, ext...)
+			}
 		}
 		out = append(out, msg.PayLoad[writed:writed+n]...)
 		writed += n
