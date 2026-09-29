@@ -6,7 +6,7 @@ import (
 	"net/url"
 	"os"
 
-	"github.com/penndev/rtmp-go/rtmp"
+	"github.com/penndev/rtmp/rtmp"
 )
 
 func AdapterFlv(name string, ch <-chan rtmp.Pack) {

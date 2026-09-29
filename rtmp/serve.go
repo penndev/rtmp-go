@@ -1,18 +1,20 @@
 package rtmp
 
 import (
-	"fmt"
 	"log"
 	"net"
-	"strings"
 	"sync"
 
 	"github.com/penndev/rtmp/amf"
+	"github.com/penndev/rtmp/pubsub"
 )
 
 type Serve struct {
-	mu   sync.RWMutex
-	Addr string
+	mu     sync.RWMutex
+	Addr   string
+	broker *pubsub.Broker
+	// path (app/stream) → latest AMF0/AMF3 data message (onMetaData etc.)
+	meta map[string]*Message
 }
 
 func (srv *Serve) handle(nc net.Conn) {
@@ -63,118 +65,58 @@ func (srv *Serve) handle(nc net.Conn) {
 		log.Printf("%s CreateStreamReply fail err[%s]", nc.RemoteAddr(), err.Error())
 		return
 	}
-	log.Printf("stream=%s", conn.Stream)
-
-	msg, err := conn.Read()
-	if err != nil {
-		log.Printf("%s Read fail err[%s]", nc.RemoteAddr(), err.Error())
-		return
-	}
-
-	var values []amf.Value
-	switch msg.MessageType {
-	case AMF0CommandMessage:
-		values, err = amf.Decode0(msg.PayLoad)
-	case AMF3CommandMessage:
-		values, err = amf.Decode3(msg.PayLoad)
-	default:
-		log.Printf("%s unexpected message type=%d", nc.RemoteAddr(), msg.MessageType)
-		return
-	}
-	if err != nil {
-		log.Printf("%s decode command fail err[%s]", nc.RemoteAddr(), err.Error())
-		return
-	}
-	if len(values) == 0 {
-		log.Printf("%s empty command message", nc.RemoteAddr())
-		return
-	}
-	name, _ := values[0].(string)
-	if len(values) >= 4 {
-		if s, ok := values[3].(string); ok && s != "" && !strings.HasSuffix(conn.Stream, s) {
-			conn.Stream += s
-		}
-	}
-
-	switch name {
-	case "publish":
-		if err := srv.handlePublish(conn); err != nil {
-			log.Printf("%s handlePublish fail err[%s]", nc.RemoteAddr(), err.Error())
-		}
-	case "play":
-		if err := srv.handlePlay(conn); err != nil {
-			log.Printf("%s handlePlay fail err[%s]", nc.RemoteAddr(), err.Error())
-		}
-	default:
-		log.Printf("%s unknown netstream command: %s", nc.RemoteAddr(), name)
-	}
-}
-
-// publish: reply onStatus + Stream Begin, then receive AV and print type
-func (srv *Serve) handlePublish(conn *Conn) error {
-	if err := conn.PublishReply(true); err != nil {
-		return err
-	}
-	if err := conn.StreamBegin(uint32(conn.StreamID)); err != nil {
-		return err
-	}
-	log.Printf("%s publishing stream=%s", conn.nc.RemoteAddr(), conn.Stream)
+	log.Printf("app=%s stream=%s", conn.App, conn.Stream)
 
 	for {
 		msg, err := conn.Read()
 		if err != nil {
-			return err
+			log.Printf("%s Read fail err[%s]", nc.RemoteAddr(), err.Error())
+			return
 		}
+
+		var values []amf.Value
 		switch msg.MessageType {
-		case Audio:
-			log.Printf("audio ts=%d len=%d", msg.Timestamp, len(msg.PayLoad))
-		case Video:
-			log.Printf("video ts=%d len=%d", msg.Timestamp, len(msg.PayLoad))
-		case AMF0DataMessage, AMF3DataMessage:
-			log.Printf("data type=%d ts=%d len=%d", msg.MessageType, msg.Timestamp, len(msg.PayLoad))
-		case AMF0CommandMessage, AMF3CommandMessage:
-			var values []amf.Value
-			switch msg.MessageType {
-			case AMF0CommandMessage:
-				values, err = amf.Decode0(msg.PayLoad)
-			case AMF3CommandMessage:
-				values, err = amf.Decode3(msg.PayLoad)
-			}
-			if err != nil {
-				return err
-			}
-			if len(values) == 0 {
-				continue
-			}
-			cmd, _ := values[0].(string)
-			switch cmd {
-			case "FCUnpublish":
-				fallthrough
-			case "deleteStream":
-				return fmt.Errorf("publisher closed: %s", cmd)
-			default:
-				log.Printf("publish command ignored: %s", cmd)
-			}
+		case AMF0CommandMessage:
+			values, err = amf.Decode0(msg.PayLoad)
+		case AMF3CommandMessage:
+			values, err = amf.Decode3(msg.PayLoad)
 		default:
-			log.Printf("publish ignore type=%d len=%d", msg.MessageType, len(msg.PayLoad))
+			log.Printf("%s unexpected message type=%d", nc.RemoteAddr(), msg.MessageType)
+			continue
 		}
-	}
-}
+		if err != nil {
+			log.Printf("%s decode command fail err[%s]", nc.RemoteAddr(), err.Error())
+			return
+		}
+		if len(values) == 0 {
+			log.Printf("%s empty command message", nc.RemoteAddr())
+			continue
+		}
+		name, _ := values[0].(string)
 
-// play: finish play handshake, then wait (media send left empty)
-func (srv *Serve) handlePlay(conn *Conn) error {
-	if err := conn.PlayReply(true); err != nil {
-		return err
-	}
-	if err := conn.StreamBegin(uint32(conn.StreamID)); err != nil {
-		return err
-	}
-	log.Printf("%s playing stream=%s (media send empty)", conn.nc.RemoteAddr(), conn.Stream)
-
-	// wait for video data — sending left empty for now
-	for {
-		if _, err := conn.Read(); err != nil {
-			return err
+		switch name {
+		case "publish":
+			if len(values) >= 4 {
+				if s, ok := values[3].(string); ok {
+					conn.Stream = s
+				}
+			}
+			if err := srv.handlePublish(conn); err != nil {
+				log.Printf("%s handlePublish fail err[%s]", nc.RemoteAddr(), err.Error())
+			}
+			return
+		case "play":
+			if len(values) >= 4 {
+				if s, ok := values[3].(string); ok {
+					conn.Stream = s
+				}
+			}
+			if err := srv.handlePlay(conn); err != nil {
+				log.Printf("%s handlePlay fail err[%s]", nc.RemoteAddr(), err.Error())
+			}
+			return
+		default:
+			log.Printf("%s ignore netstream command: %s", nc.RemoteAddr(), name)
 		}
 	}
 }
@@ -196,7 +138,9 @@ func (srv *Serve) Listen(address string) error {
 }
 
 // create new rtmp serve
-func NewRtmp() *Serve {
-	s := &Serve{}
-	return s
+func New() *Serve {
+	return &Serve{
+		broker: pubsub.New(),
+		meta:   make(map[string]*Message),
+	}
 }

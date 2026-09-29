@@ -13,7 +13,8 @@ import (
 type Conn struct {
 	Chunk
 	nc       net.Conn
-	Stream   string  // app + stream name concatenated (clients split app/stream differently)
+	App      string  // from connect
+	Stream   string  // stream name from FCPublish / publish / play
 	StreamID float64 // NetStream ID from createStream; 0 is reserved for NetConnection
 }
 
@@ -47,7 +48,7 @@ func (c *Conn) Connect() (*ConnectCommand, error) {
 	if err != nil {
 		return nil, err
 	}
-	c.Stream = cmd.CommandObject.App
+	c.App = cmd.CommandObject.App
 	return cmd, nil
 }
 
@@ -134,7 +135,7 @@ func (c *Conn) CreateStream() (*CreateStreamCommand, error) {
 			// commandName, transactionId, null, streamName
 			if len(values) >= 4 {
 				if s, ok := values[3].(string); ok {
-					c.Stream += s
+					c.Stream = s
 				}
 			}
 			continue
@@ -202,6 +203,28 @@ func (c *Conn) StreamBegin(streamID uint32) error {
 	payload := make([]byte, 6)
 	binary.BigEndian.PutUint32(payload[2:], streamID)
 	return c.sendMsg(UserControl, 2, 0, payload)
+}
+
+// 6.2. User Control Messages — Stream EOF (event type 1)
+func (c *Conn) StreamEOF(streamID uint32) error {
+	payload := make([]byte, 6)
+	binary.BigEndian.PutUint16(payload[:2], 1)
+	binary.BigEndian.PutUint32(payload[2:], streamID)
+	return c.sendMsg(UserControl, 2, 0, payload)
+}
+
+// NetStream.Play.Stop — notify player the stream has ended
+func (c *Conn) PlayStop() error {
+	res := amf.Object{
+		"level":       "status",
+		"code":        "NetStream.Play.Stop",
+		"description": "Stopped playing stream.",
+	}
+	payload, err := amf.Encode0([]amf.Value{"onStatus", 0.0, nil, res})
+	if err != nil {
+		return err
+	}
+	return c.sendMsg(AMF0CommandMessage, 3, uint32(c.StreamID), payload)
 }
 
 

@@ -8,7 +8,7 @@ import (
 func main() {
 	flag.Parse()
 
-	rtmpSrv := rtmp.NewRtmp()
+	rtmpSrv := rtmp.New()
 	print("Rtmp Serve listening rtmp://", flag.RtmpAddr, "\n")
 	err := rtmpSrv.Listen(flag.RtmpAddr)
 	panic(err)

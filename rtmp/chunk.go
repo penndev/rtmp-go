@@ -277,36 +277,52 @@ func writeMsgHeader(fmt byte, h MessageHeader) []byte {
 
 // sendMsg 拼完整后一次写出（csid 须 >= 2）
 func (chk *Chunk) sendMsg(msgType MessageType, csid int, streamID uint32, payload []byte) error {
+	return chk.sendMessage(csid, streamID, &Message{
+		MessageHeader: MessageHeader{
+			MessageType:     msgType,
+			MessageLength:   uint32(len(payload)),
+			MessageStreamID: streamID,
+		},
+		PayLoad: payload,
+	})
+}
+
+// sendMessage writes one RTMP message with absolute timestamp (always fmt 0).
+func (chk *Chunk) sendMessage(csid int, streamID uint32, msg *Message) error {
 	if csid < 2 {
-		return errors.New("sendMsg: csid must be >= 2")
+		return errors.New("sendMessage: csid must be >= 2")
 	}
-	writeFmt := byte(1)
-	if _, ok := chk.writeStreamList[csid]; !ok {
-		writeFmt = 0
+	abs := msg.Timestamp
+	if msg.Timestamp == 0xFFFFFF {
+		abs = msg.ExtendTimestamp
 	}
 	h := MessageHeader{
-		Timestamp:       chk.writeStreamList[csid].Timestamp,
-		ExtendTimestamp: chk.writeStreamList[csid].ExtendTimestamp,
-		MessageType:     msgType,
-		MessageLength:   uint32(len(payload)),
+		MessageType:     msg.MessageType,
+		MessageLength:   uint32(len(msg.PayLoad)),
 		MessageStreamID: streamID,
+	}
+	if abs >= 0xFFFFFF {
+		h.Timestamp = 0xFFFFFF
+		h.ExtendTimestamp = abs
+	} else {
+		h.Timestamp = abs
 	}
 	chk.writeStreamList[csid] = h
 
-	out := make([]byte, 0, 16+len(payload))
+	out := make([]byte, 0, 16+len(msg.PayLoad))
 	writed := 0
-	for writed < len(payload) {
+	for writed < len(msg.PayLoad) {
 		n := int(chk.writeChunkSize)
-		if remain := len(payload) - writed; remain < n {
+		if remain := len(msg.PayLoad) - writed; remain < n {
 			n = remain
 		}
 		if writed == 0 {
-			out = append(out, writeBasicHeader(writeFmt, csid)...)
-			out = append(out, writeMsgHeader(writeFmt, h)...)
+			out = append(out, writeBasicHeader(0, csid)...)
+			out = append(out, writeMsgHeader(0, h)...)
 		} else {
 			out = append(out, writeBasicHeader(3, csid)...)
 		}
-		out = append(out, payload[writed:writed+n]...)
+		out = append(out, msg.PayLoad[writed:writed+n]...)
 		writed += n
 	}
 	if err := chk.write(out); err != nil {
