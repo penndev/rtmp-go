@@ -9,7 +9,7 @@ import (
 
 func roundTrip0(t *testing.T, v amf.Value) amf.Value {
 	t.Helper()
-	b, err := amf.Encode0(v)
+	b, err := amf.Encode0([]amf.Value{v})
 	if err != nil {
 		t.Fatalf("Encode0(%T): %v", v, err)
 	}
@@ -110,7 +110,7 @@ func TestAMF0_XMLDocument(t *testing.T) {
 <root>
   <item id="1">hello</item>
 </root>`)
-	b, err := amf.Encode0(in)
+	b, err := amf.Encode0([]amf.Value{in})
 	if err != nil {
 		t.Fatalf("Encode0: %v", err)
 	}
@@ -145,7 +145,7 @@ func TestAMF0_Unsupported(t *testing.T) {
 }
 
 func TestAMF0_Reference(t *testing.T) {
-	objBytes, err := amf.Encode0(amf.Object{"k": "v"})
+	objBytes, err := amf.Encode0([]amf.Value{amf.Object{"k": "v"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,7 +170,7 @@ func TestAMF0_AVMPlus(t *testing.T) {
 }
 
 func TestAMF0_ConnectCommand(t *testing.T) {
-	payload, err := amf.Encode([]amf.Value{
+	payload, err := amf.Encode0([]amf.Value{
 		"connect", 1.0,
 		amf.Object{"app": "live", "objectEncoding": 0.0},
 	})

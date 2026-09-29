@@ -25,22 +25,45 @@ type Chunk struct {
 	w *bufio.Writer
 
 	readStreamList  map[int]*Message
-	writeStreamList map[int]*MessageHeader
+	writeStreamList map[int]MessageHeader
 
 	readChunkSize  uint32
 	writeChunkSize uint32
+
+	// 5.4.3 / 5.4.4 acknowledgement accounting (uint32 wraps at 2^32)
+	bytesReceived uint32 // bytes read so far
+	bytesSent     uint32 // bytes written so far
+	ackWindowSize uint32 // peer Window Acknowledgement Size; 0 = do not ack
+	lastAckBytes  uint32 // bytesReceived at last Acknowledgement we sent
 }
 
 // 从net.conn 读取数据，阻塞型函数
 func (chk *Chunk) read(l int) ([]byte, error) {
 	buf := make([]byte, l)
 	_, err := io.ReadFull(chk.r, buf)
-	return buf, err
+	if err != nil {
+		return nil, err
+	}
+	chk.bytesReceived += uint32(l)
+	// 5.4.4: The receiving peer MUST send an Acknowledgement after
+	// receiving the indicated number of bytes since the last
+	// Acknowledgement was sent, or beginning of the session if no
+	// Acknowledgement has yet been sent.
+	if chk.ackWindowSize > 0 && chk.bytesReceived-chk.lastAckBytes >= chk.ackWindowSize {
+		payload := make([]byte, 4)
+		binary.BigEndian.PutUint32(payload, chk.bytesReceived)
+		if err := chk.sendMsg(Acknowledgement, 2, 0, payload); err != nil {
+			return nil, err
+		}
+		chk.lastAckBytes = chk.bytesReceived
+	}
+	return buf, nil
 }
 
 // 写入到net.conn数据，并不一定会发送
 func (chk *Chunk) write(buf []byte) error {
-	_, err := chk.w.Write(buf)
+	n, err := chk.w.Write(buf)
+	chk.bytesSent += uint32(n)
 	return err
 }
 
@@ -187,9 +210,107 @@ func (chk *Chunk) Read() (*Message, error) {
 			if m, ok := chk.readStreamList[csid]; ok {
 				m.PayLoad = nil
 			}
-
+		case Acknowledgement:
+			// 5.4.3. Acknowledgement (3)
+			// sequence number (32 bits): This field holds the number of
+			// bytes received so far (by the peer) — compare with bytesSent.
+			if len(msg.PayLoad) < 4 {
+				return nil, errors.New("Acknowledgement: payload too short")
+			}
+			seq := binary.BigEndian.Uint32(msg.PayLoad)
+			if seq > chk.bytesSent {
+				return nil, errors.New("Acknowledgement: sequence exceeds bytes sent")
+			}
+		case WindowAcknowledgementSize:
+			// 5.4.4. Window Acknowledgement Size (5)
+			// The receiving peer MUST send an Acknowledgement after
+			// receiving the indicated number of bytes since the last
+			// Acknowledgement was sent.
+			if len(msg.PayLoad) < 4 {
+				return nil, errors.New("WindowAcknowledgementSize: payload too short")
+			}
+			chk.ackWindowSize = binary.BigEndian.Uint32(msg.PayLoad)
 		default:
 			return &msg, nil
 		}
 	}
+}
+
+// writeBasicHeader 5.3.1.1
+func writeBasicHeader(fmt byte, csid int) []byte {
+	if csid < 64 {
+		return []byte{byte(csid) | (fmt << 6)}
+	}
+	if csid < 320 {
+		return []byte{fmt << 6, byte(csid - 64)}
+	}
+	n := csid - 64
+	return []byte{1 | (fmt << 6), byte(n), byte(n >> 8)}
+}
+
+// writeMsgHeader 5.3.1.2
+func writeMsgHeader(fmt byte, h MessageHeader) []byte {
+	var buf []byte
+	if fmt < 3 {
+		ts := h.Timestamp
+		if ts >= 0xFFFFFF {
+			ts = 0xFFFFFF
+		}
+		buf = append(buf, byte(ts>>16), byte(ts>>8), byte(ts))
+	}
+	if fmt < 2 {
+		ml := h.MessageLength
+		buf = append(buf, byte(ml>>16), byte(ml>>8), byte(ml), byte(h.MessageType))
+	}
+	if fmt < 1 {
+		sid := make([]byte, 4)
+		binary.LittleEndian.PutUint32(sid, h.MessageStreamID)
+		buf = append(buf, sid...)
+	}
+	if h.Timestamp >= 0xFFFFFF {
+		ext := make([]byte, 4)
+		binary.BigEndian.PutUint32(ext, h.ExtendTimestamp)
+		buf = append(buf, ext...)
+	}
+	return buf
+}
+
+// sendMsg 拼完整后一次写出（csid 须 >= 2）
+func (chk *Chunk) sendMsg(msgType MessageType, csid int, streamID uint32, payload []byte) error {
+	if csid < 2 {
+		return errors.New("sendMsg: csid must be >= 2")
+	}
+	writeFmt := byte(1)
+	if _, ok := chk.writeStreamList[csid]; !ok {
+		writeFmt = 0
+	}
+	h := MessageHeader{
+		Timestamp:       chk.writeStreamList[csid].Timestamp,
+		ExtendTimestamp: chk.writeStreamList[csid].ExtendTimestamp,
+		MessageType:     msgType,
+		MessageLength:   uint32(len(payload)),
+		MessageStreamID: streamID,
+	}
+	chk.writeStreamList[csid] = h
+
+	out := make([]byte, 0, 16+len(payload))
+	writed := 0
+	for writed < len(payload) {
+		n := int(chk.writeChunkSize)
+		if remain := len(payload) - writed; remain < n {
+			n = remain
+		}
+		if writed == 0 {
+			out = append(out, writeBasicHeader(writeFmt, csid)...)
+			out = append(out, writeMsgHeader(writeFmt, h)...)
+		} else {
+			out = append(out, writeBasicHeader(3, csid)...)
+		}
+		out = append(out, payload[writed:writed+n]...)
+		writed += n
+	}
+	if err := chk.write(out); err != nil {
+		return err
+	}
+	return chk.w.Flush()
 }

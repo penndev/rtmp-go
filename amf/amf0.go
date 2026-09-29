@@ -303,12 +303,12 @@ func (d *Decoder) readAMF0TypedObject() (TypedObject, error) {
 	}
 }
 
-// Encode writes vals as consecutive AMF0 values.
+// Encode0 writes vals as consecutive AMF0 values.
 // Enhanced RTMP: prefer Object (not ECMAArray) when creating data.
-func Encode(vals []Value) ([]byte, error) {
+func Encode0(vals []Value) ([]byte, error) {
 	var out []byte
 	for _, v := range vals {
-		b, err := Encode0(v)
+		b, err := encode0(v)
 		if err != nil {
 			return nil, err
 		}
@@ -317,8 +317,8 @@ func Encode(vals []Value) ([]byte, error) {
 	return out, nil
 }
 
-// Encode0 encodes one value as AMF0.
-func Encode0(v Value) ([]byte, error) {
+// encode0 encodes one value as AMF0.
+func encode0(v Value) ([]byte, error) {
 	if v == nil {
 		return []byte{AMF0Null}, nil
 	}
@@ -432,7 +432,7 @@ func encodeAMF0Object(obj Object) ([]byte, error) {
 	out := []byte{AMF0Object}
 	for k, v := range obj {
 		out = append(out, encodeAMF0UTF8(k)...)
-		ev, err := Encode0(v)
+		ev, err := encode0(v)
 		if err != nil {
 			return nil, err
 		}
@@ -448,7 +448,7 @@ func encodeAMF0ECMAArray(arr ECMAArray) ([]byte, error) {
 	binary.BigEndian.PutUint32(out[1:], uint32(len(arr)))
 	for k, v := range arr {
 		out = append(out, encodeAMF0UTF8(k)...)
-		ev, err := Encode0(v)
+		ev, err := encode0(v)
 		if err != nil {
 			return nil, err
 		}
@@ -463,7 +463,7 @@ func encodeAMF0StrictArray(arr StrictArray) ([]byte, error) {
 	out[0] = AMF0StrictArray
 	binary.BigEndian.PutUint32(out[1:], uint32(len(arr)))
 	for _, v := range arr {
-		ev, err := Encode0(v)
+		ev, err := encode0(v)
 		if err != nil {
 			return nil, err
 		}
@@ -510,7 +510,7 @@ func encodeAMF0TypedObject(t TypedObject) ([]byte, error) {
 	}
 	for k, v := range fields {
 		out = append(out, encodeAMF0UTF8(k)...)
-		ev, err := Encode0(v)
+		ev, err := encode0(v)
 		if err != nil {
 			return nil, err
 		}

@@ -21,8 +21,8 @@ func Decode3(b []byte) ([]Value, error) {
 	return out, nil
 }
 
-// Encode3All encodes vals as consecutive AMF3 values.
-func Encode3All(vals []Value) ([]byte, error) {
+// Encode3 encodes vals as consecutive AMF3 values.
+func Encode3(vals []Value) ([]byte, error) {
 	e := &encoder3{}
 	var out []byte
 	for _, v := range vals {
@@ -33,12 +33,6 @@ func Encode3All(vals []Value) ([]byte, error) {
 		out = append(out, b...)
 	}
 	return out, nil
-}
-
-// Encode3 encodes one value as AMF3.
-func Encode3(v Value) ([]byte, error) {
-	e := &encoder3{}
-	return e.encode(v)
 }
 
 type encoder3 struct {

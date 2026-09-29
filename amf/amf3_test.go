@@ -9,7 +9,7 @@ import (
 
 func roundTrip3(t *testing.T, v amf.Value) amf.Value {
 	t.Helper()
-	b, err := amf.Encode3(v)
+	b, err := amf.Encode3([]amf.Value{v})
 	if err != nil {
 		t.Fatalf("Encode3(%T): %v", v, err)
 	}
@@ -66,7 +66,7 @@ func TestAMF3_String(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 	// string reference within one message
-	b, err := amf.Encode3All([]amf.Value{"hi", "hi"})
+	b, err := amf.Encode3([]amf.Value{"hi", "hi"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +84,7 @@ func TestAMF3_XMLDocument(t *testing.T) {
 <root>
   <item id="1">hello</item>
 </root>`)
-	b, err := amf.Encode3(in)
+	b, err := amf.Encode3([]amf.Value{in})
 	if err != nil {
 		t.Fatalf("Encode3: %v", err)
 	}
@@ -103,7 +103,7 @@ func TestAMF3_XMLDocument(t *testing.T) {
 
 func TestAMF3_XML(t *testing.T) {
 	in := amf.XML(`<node id="1">hello</node>`)
-	b, err := amf.Encode3(in)
+	b, err := amf.Encode3([]amf.Value{in})
 	if err != nil {
 		t.Fatalf("Encode3: %v", err)
 	}
@@ -236,12 +236,12 @@ func TestAMF3_Dictionary(t *testing.T) {
 }
 
 func TestAMF3_ViaAMF0Marker(t *testing.T) {
-	amf3Int, err := amf.Encode3(amf.Integer(1))
+	amf3Int, err := amf.Encode3([]amf.Value{amf.Integer(1)})
 	if err != nil {
 		t.Fatal(err)
 	}
 	b := append([]byte{amf.AMF0AVMPlus}, amf3Int...)
-	cmd, err := amf.Encode([]amf.Value{"_result"})
+	cmd, err := amf.Encode0([]amf.Value{"_result"})
 	if err != nil {
 		t.Fatal(err)
 	}

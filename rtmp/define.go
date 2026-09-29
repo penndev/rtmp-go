@@ -21,6 +21,30 @@ const VERSION = 0x03
 //  chunk.
 const DEFAULT_CHUNK_SIZE = 128
 
+// The return value is either a stream ID or an error information object.
+// NetConnection is the default communication channel, which has a stream ID 0.
+const DEFAULT_STREAM_ID = 1.0
+
+// Preferred chunk size after handshake. Valid sizes are 1 to 2147483647
+// (0x7FFFFFFF inclusive); the first bit MUST be zero (5.4.1).
+const PREFERRED_CHUNK_SIZE uint32 = 65536
+
+// 5.4.4. Window Acknowledgement Size (5)
+// The client or the server sends this message to inform the peer of
+// the window size to use between sending acknowledgements. The
+// receiving peer MUST send an Acknowledgement (Section 5.4.3) after
+// receiving the indicated number of bytes since the last
+// Acknowledgement was sent, or beginning of the session if no
+// Acknowledgement has yet been sent.
+const DEFAULT_WINDOW_ACK_SIZE uint32 = 2500000
+
+// 5.4.5. Set Peer Bandwidth (6)
+// The client or the server sends this message to limit the output
+// bandwidth of its peer. The peer receiving this message SHOULD
+// limit its output bandwidth by limiting the amount of outstanding
+// (unacknowledged) data to the window size indicated.
+const DEFAULT_PEER_BANDWIDTH uint32 = 2500000
+
 type MessageType byte
 
 const (
@@ -52,3 +76,4 @@ const (
 	AMF0CommandMessage MessageType = 20
 	AggregateMessage   MessageType = 22
 )
+

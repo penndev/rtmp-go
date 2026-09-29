@@ -4,7 +4,7 @@ import "github.com/penndev/rtmp/amf"
 
 func respConnect(b bool) []byte {
 	if !b {
-		out, _ := amf.Encode([]amf.Value{"_error", 1, nil, nil})
+		out, _ := amf.Encode0([]amf.Value{"_error", 1, nil, nil})
 		return out
 	}
 	repVer := amf.Object{
@@ -17,12 +17,12 @@ func respConnect(b bool) []byte {
 		"description":    "Connection succeeded.",
 		"objectEncoding": 3,
 	}
-	out, _ := amf.Encode([]amf.Value{"_result", 1, repVer, repStatus})
+	out, _ := amf.Encode0([]amf.Value{"_result", 1, repVer, repStatus})
 	return out
 }
 
 func respCreateStream(_ bool, tranId int, streamId int) []byte {
-	out, _ := amf.Encode([]amf.Value{"_result", tranId, nil, streamId})
+	out, _ := amf.Encode0([]amf.Value{"_result", tranId, nil, streamId})
 	return out
 }
 
@@ -36,7 +36,7 @@ func respPublish(b bool) []byte {
 	} else {
 		res["code"] = "NetStream.Publish.BadName"
 	}
-	out, _ := amf.Encode([]amf.Value{"onStatus", 0, nil, res})
+	out, _ := amf.Encode0([]amf.Value{"onStatus", 0, nil, res})
 	return out
 }
 
@@ -50,6 +50,6 @@ func respPlay(b bool) []byte {
 	} else {
 		res["code"] = "NetStream.Play.Failed"
 	}
-	out, _ := amf.Encode([]amf.Value{"onStatus", 0, nil, res})
+	out, _ := amf.Encode0([]amf.Value{"onStatus", 0, nil, res})
 	return out
 }
