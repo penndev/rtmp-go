@@ -1,29 +1,30 @@
 package rtmp
 
-//  Version (8 bits): In C0, this field identifies the RTMP version
-//  requested by the client. In S0, this field identifies the RTMP
-//  version selected by the server. The version defined by this
-//  specification is 3. Values 0-2 are deprecated values used by
-//  earlier proprietary products; 4-31 are reserved for future
-//  implementations; and 32-255 are not allowed (to allow
-//  distinguishing RTMP from text-based protocols, which always start
-//  with a printable character). A server that does not recognize the
-//  client’s requested version SHOULD respond with 3. The client MAY
-//  choose to degrade to version 3, or to abandon the handsha
+// Version (8 bits): In C0, this field identifies the RTMP version
+// requested by the client. In S0, this field identifies the RTMP
+// version selected by the server. The version defined by this
+// specification is 3. Values 0-2 are deprecated values used by
+// earlier proprietary products; 4-31 are reserved for future
+// implementations; and 32-255 are not allowed (to allow
+// distinguishing RTMP from text-based protocols, which always start
+// with a printable character). A server that does not recognize the
+// client’s requested version SHOULD respond with 3. The client MAY
+// choose to degrade to version 3, or to abandon the handsha
 const VERSION = 0x03
 
-//  Tthe maximum chunk size defaults to 128 bytes, but the client or the
-//  server can change this value, and updates its peer using this
-//  message. For example, suppose a client wants to send 131 bytes of
-//  audio data and the chunk size is 128. In this case, the client can
-//  send this message to the server to notify it that the chunk size is
-//  now 131 bytes. The client can then send the audio data in a single
-//  chunk.
+// Tthe maximum chunk size defaults to 128 bytes, but the client or the
+// server can change this value, and updates its peer using this
+// message. For example, suppose a client wants to send 131 bytes of
+// audio data and the chunk size is 128. In this case, the client can
+// send this message to the server to notify it that the chunk size is
+// now 131 bytes. The client can then send the audio data in a single
+// chunk.
 const DEFAULT_CHUNK_SIZE = 128
 
-// The return value is either a stream ID or an error information object.
-// NetConnection is the default communication channel, which has a stream ID 0.
-const DEFAULT_STREAM_ID = 1.0
+// 7.2.1.3. createStream — The return value is either a stream ID or an
+// error information object. NetConnection is the default communication
+// channel, which has a stream ID 0.
+const DefaultNetStreamID = 1
 
 // Preferred chunk size after handshake. Valid sizes are 1 to 2147483647
 // (0x7FFFFFFF inclusive); the first bit MUST be zero (5.4.1).
@@ -44,6 +45,21 @@ const DEFAULT_WINDOW_ACK_SIZE uint32 = 2500000
 // limit its output bandwidth by limiting the amount of outstanding
 // (unacknowledged) data to the window size indicated.
 const DEFAULT_PEER_BANDWIDTH uint32 = 2500000
+
+// 5.3.1.1. Chunk Basic Header — The protocol supports up to 65597 streams
+// with IDs 3-65599. The IDs 0, 1, and 2 are reserved. Value 0 indicates
+// the 2-byte form and an ID in the range of 64-319 (the second byte + 64).
+// Value 1 indicates the 3-byte form and an ID in the range of 64-65599
+// ((the third byte)*256 + the second byte + 64). Values in the range of
+// 3-63 represent the complete stream ID. Chunk Stream ID with value 2 is
+// reserved for low-level protocol control messages and commands.
+const (
+	CSIDProtocolControl = 2 // reserved for low-level protocol control messages and commands
+	CSIDCommand         = 3 // conventional: AMF command messages
+	CSIDAudio           = 4 // conventional: audio messages
+	CSIDData            = 5 // conventional: data / metadata messages
+	CSIDVideo           = 6 // conventional: video messages
+)
 
 type MessageType byte
 
@@ -76,4 +92,3 @@ const (
 	AMF0CommandMessage MessageType = 20
 	AggregateMessage   MessageType = 22
 )
-

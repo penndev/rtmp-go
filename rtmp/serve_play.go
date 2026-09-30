@@ -22,7 +22,7 @@ func (srv *Serve) handlePlay(conn *Conn) error {
 	meta := srv.meta[path]
 	srv.mu.RUnlock()
 	if meta != nil {
-		if err := conn.Write(5, sid, meta); err != nil {
+		if err := conn.Write(CSIDData, sid, meta); err != nil {
 			return err
 		}
 	}
@@ -52,12 +52,12 @@ func (srv *Serve) handlePlay(conn *Conn) error {
 			if !ok || msg == nil {
 				continue
 			}
-			csid := 5
+			csid := CSIDData
 			switch msg.MessageType {
 			case Audio:
-				csid = 4
+				csid = CSIDAudio
 			case Video:
-				csid = 6
+				csid = CSIDVideo
 			}
 			if err := conn.Write(csid, sid, msg); err != nil {
 				return err

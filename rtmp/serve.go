@@ -1,3 +1,5 @@
+// https://veovera.org/docs/legacy/rtmp-v1-0-spec.pdf
+
 package rtmp
 
 import (
@@ -73,7 +75,7 @@ func (srv *Serve) handle(nc net.Conn) {
 		return
 	}
 
-	if err := conn.CreateStreamReply(cs, DEFAULT_STREAM_ID); err != nil {
+	if err := conn.CreateStreamReply(cs, DefaultNetStreamID); err != nil {
 		log.Printf("%s CreateStreamReply fail err[%s]", nc.RemoteAddr(), err.Error())
 		return
 	}

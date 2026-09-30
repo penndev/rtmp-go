@@ -4,8 +4,8 @@ Action Message Format（AMF0 / AMF3）编解码库。
 
 依据：
 
-- [Adobe AMF0](https://rtmp.veriskope.com/pdf/amf0-file-format-specification.pdf)
-- [Adobe AMF3](https://rtmp.veriskope.com/pdf/amf3-file-format-spec.pdf)
+- [Adobe AMF0](https://veovera.org/docs/legacy/amf0-file-format-spec.pdf)
+- [Adobe AMF3](https://veovera.org/docs/legacy/amf3-file-format-spec.pdf)
 - [veovera/enhanced-rtmp](https://github.com/veovera/enhanced-rtmp)
 
 约定：

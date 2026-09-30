@@ -60,7 +60,7 @@ func (chk *Chunk) read(l int) ([]byte, error) {
 	if chk.ackWindowSize > 0 && chk.bytesReceived-chk.lastAckBytes >= chk.ackWindowSize {
 		payload := make([]byte, 4)
 		binary.BigEndian.PutUint32(payload, chk.bytesReceived)
-		if err := chk.Write(2, 0, &Message{
+		if err := chk.Write(CSIDProtocolControl, 0, &Message{
 			MessageHeader: MessageHeader{MessageType: Acknowledgement},
 			PayLoad:       payload,
 		}); err != nil {

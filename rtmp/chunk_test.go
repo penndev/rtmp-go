@@ -175,7 +175,7 @@ func TestTimestampExtended(t *testing.T) {
 		readChunkSize:   3,
 		writeChunkSize:  3,
 	}
-	if err := w.Write(6, 1, msg); err != nil {
+	if err := w.Write(CSIDVideo, 1, msg); err != nil {
 		t.Fatal(err)
 	}
 	r := testChunk(out.Bytes())
