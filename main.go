@@ -1,15 +1,15 @@
 package main
 
 import (
-	"github.com/penndev/rtmp/flag"
+	"fmt"
+
 	"github.com/penndev/rtmp/rtmp"
 )
 
 func main() {
-	flag.Parse()
-
+	addr := "127.0.0.1:1935"
 	rtmpSrv := rtmp.New()
-	print("Rtmp Serve listening rtmp://", flag.RtmpAddr, "\n")
-	err := rtmpSrv.Listen(flag.RtmpAddr)
+	fmt.Printf("Rtmp Serve listening rtmp://%s", addr)
+	err := rtmpSrv.Listen(addr)
 	panic(err)
 }

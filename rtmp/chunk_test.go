@@ -95,7 +95,7 @@ func TestTimestampAudioVideo(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		got = append(got, string(rune('0'+msg.MessageType))+"@"+itoa(msg.Timestamp))
+		got = append(got, string(rune('0'+msg.MessageType))+"@"+itoa(msg.Timestamp()))
 	}
 	want := []string{
 		"9@0",
@@ -139,15 +139,15 @@ func TestTimestampSplitChunk(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if msg.Timestamp != 1000 {
-		t.Fatalf("first ts %d", msg.Timestamp)
+	if msg.Timestamp() != 1000 {
+		t.Fatalf("first ts %d", msg.Timestamp())
 	}
 	msg, err = chk.Read()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if msg.Timestamp != 1040 {
-		t.Fatalf("split frame ts %d, want 1040", msg.Timestamp)
+	if msg.Timestamp() != 1040 {
+		t.Fatalf("split frame ts %d, want 1040", msg.Timestamp())
 	}
 	if !bytes.Equal(msg.PayLoad, payload) {
 		t.Fatalf("payload %v", msg.PayLoad)
@@ -163,8 +163,8 @@ func TestTimestampExtended(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if msg.Timestamp != ts {
-		t.Fatalf("read ts %d", msg.Timestamp)
+	if msg.Timestamp() != ts {
+		t.Fatalf("read ts %d", msg.Timestamp())
 	}
 
 	var out bytes.Buffer
@@ -184,8 +184,8 @@ func TestTimestampExtended(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if msg.Timestamp != ts {
-		t.Fatalf("roundtrip ts %d", msg.Timestamp)
+	if msg.Timestamp() != ts {
+		t.Fatalf("roundtrip ts %d", msg.Timestamp())
 	}
 	if !bytes.Equal(msg.PayLoad, []byte{0x01, 0x02, 0x03, 0x04, 0x05}) {
 		t.Fatalf("payload %v", msg.PayLoad)

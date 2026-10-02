@@ -5,30 +5,12 @@ package rtmp
 import (
 	"log"
 	"net"
-	"sync"
 
 	"github.com/penndev/rtmp/amf"
-	"github.com/penndev/rtmp/pubsub"
 )
 
 type Serve struct {
-	mu     sync.RWMutex
-	Addr   string
-	broker *pubsub.Broker
-	// path (app/stream) → latest AMF0/AMF3 data message (onMetaData etc.)
-	meta map[string]*Message
-}
-
-func (srv *Serve) setMeta(path string, msg *Message) {
-	srv.mu.Lock()
-	srv.meta[path] = msg
-	srv.mu.Unlock()
-}
-
-func (srv *Serve) deleteMeta(path string) {
-	srv.mu.Lock()
-	delete(srv.meta, path)
-	srv.mu.Unlock()
+	Addr string
 }
 
 func (srv *Serve) handle(nc net.Conn) {
@@ -156,8 +138,5 @@ func (srv *Serve) Listen(address string) error {
 
 // create new rtmp serve
 func New() *Serve {
-	return &Serve{
-		broker: pubsub.New(),
-		meta:   make(map[string]*Message),
-	}
+	return &Serve{}
 }

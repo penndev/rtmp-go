@@ -4,7 +4,6 @@ import (
 	"log"
 
 	"github.com/penndev/rtmp/amf"
-	"github.com/penndev/rtmp/flv"
 	"github.com/penndev/rtmp/pubsub"
 )
 
@@ -16,16 +15,13 @@ func (srv *Serve) handlePublish(conn *Conn) error {
 	if err := conn.StreamBegin(uint32(conn.StreamID)); err != nil {
 		return err
 	}
-
 	path := conn.App + "/" + conn.Stream
 	log.Printf("%s publishing path=%s", conn.nc.RemoteAddr(), path)
-	topic := srv.broker.Topic(path)
-	defer func() {
-		topic.Close()
-		srv.deleteMeta(path)
-	}()
+	topic := pubsub.PubTopic(path)
 
-	go flv.AdapterFlv(path, topic.Subscribe())
+	defer topic.Close()
+	// flv to runtime file
+	go AdapterFlv(path, topic.Subscribe())
 
 	for {
 		msg, err := conn.Read()
@@ -37,7 +33,6 @@ func (srv *Serve) handlePublish(conn *Conn) error {
 			topic.Publish(&pubsub.Message{Data: msg})
 		case AMF0DataMessage, AMF3DataMessage:
 			topic.Publish(&pubsub.Message{Data: msg})
-			srv.setMeta(path, msg)
 		case AMF0CommandMessage, AMF3CommandMessage:
 			var values []amf.Value
 			switch msg.MessageType {

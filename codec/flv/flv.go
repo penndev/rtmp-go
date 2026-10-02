@@ -127,7 +127,7 @@ func (f *FLV) WriteTag(tag *Tag) error {
 	return nil
 }
 
-// TagWrite builds a tag from type/timestamp/payload and writes it (AdapterFlv).
+// TagWrite builds a tag from type/timestamp/payload and writes it.
 func (f *FLV) TagWrite(tagType byte, timestamp uint32, data []byte) error {
 	return f.WriteTag(&Tag{
 		TagType:   tagType,

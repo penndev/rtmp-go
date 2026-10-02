@@ -7,27 +7,6 @@ import (
 	"io"
 )
 
-type MessageHeader struct {
-	Timestamp       uint32      // 绝对时间（读完一条消息后）
-	MessageLength   uint32      // 3 byte
-	MessageType     MessageType // 1 byte
-	MessageStreamID uint32      // 4 byte
-	ExtendTimestamp uint32      // 4 byte
-
-	// 同一 csid 上跨消息保留的读状态
-	TimestampDelta     uint32 // 上一次增量；fmt 0 后为 0
-	HasExtendTimestamp bool   // 上一片是否带了 5.3.1.3 扩展时间戳
-}
-
-type Message struct {
-	MessageHeader
-	PayLoad []byte
-}
-
-func (m *Message) TagType() byte        { return byte(m.MessageType) }
-func (m *Message) TagTimestamp() uint32 { return m.Timestamp }
-func (m *Message) TagData() []byte      { return m.PayLoad }
-
 type Chunk struct {
 	r *bufio.Reader
 	w *bufio.Writer
@@ -135,7 +114,7 @@ func (chk *Chunk) readMsgHeader(fmt int, csid int) error {
 
 	chk.readStreamList[csid].HasExtendTimestamp = ext
 	if fmt == 0 {
-		chk.readStreamList[csid].Timestamp = timestamp
+		chk.readStreamList[csid].MessageHeader.Timestamp = timestamp
 		chk.readStreamList[csid].TimestampDelta = 0
 	} else {
 		chk.readStreamList[csid].TimestampDelta = timestamp
@@ -202,7 +181,7 @@ func (chk *Chunk) readMessage() (Message, error) {
 		chk.readStreamList[csid].PayLoad = append(chk.readStreamList[csid].PayLoad, load...)
 
 		if uint32(len(chk.readStreamList[csid].PayLoad)) >= chk.readStreamList[csid].MessageLength {
-			chk.readStreamList[csid].Timestamp += chk.readStreamList[csid].TimestampDelta
+			chk.readStreamList[csid].MessageHeader.Timestamp += chk.readStreamList[csid].TimestampDelta
 			msg := *chk.readStreamList[csid]
 			chk.readStreamList[csid].PayLoad = nil
 			return msg, nil
@@ -311,7 +290,7 @@ func (chk *Chunk) Write(csid int, streamID uint32, msg *Message) error {
 	if csid < 2 {
 		return errors.New("Write: csid must be >= 2")
 	}
-	abs := msg.Timestamp
+	abs := msg.MessageHeader.Timestamp
 	h := MessageHeader{
 		MessageType:     msg.MessageType,
 		MessageLength:   uint32(len(msg.PayLoad)),

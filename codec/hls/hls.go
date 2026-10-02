@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/penndev/rtmp-go/mpegts"
-	"github.com/penndev/rtmp-go/rtmp"
+	"github.com/penndev/rtmp/codec/mpegts"
+	"github.com/penndev/rtmp/rtmp"
 )
 
 var HlsHeader = `#EXTM3U
