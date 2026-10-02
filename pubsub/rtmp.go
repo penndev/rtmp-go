@@ -116,7 +116,12 @@ func SubTopic(name string) *Subscription {
 		sub.Write(audio)
 	}
 	sub.Filter = func(msg *Message) bool {
-		if !isVideoKeyframe(msg) {
+		tag, ok := msg.Data.(flv.FlvTag)
+		if !ok || tag.Type() != flv.TAG_TYPE_VIDEO {
+			return false
+		}
+		data := tag.Data()
+		if len(data) < 1 || data[0]>>4 != flv.FRAME_TYPE_KEY {
 			return false
 		}
 		sub.Filter = nil
@@ -124,13 +129,4 @@ func SubTopic(name string) *Subscription {
 	}
 	top.Attach(sub)
 	return sub
-}
-
-func isVideoKeyframe(msg *Message) bool {
-	tag, ok := msg.Data.(flv.FlvTag)
-	if !ok || tag.Type() != flv.TAG_TYPE_VIDEO {
-		return false
-	}
-	data := tag.Data()
-	return len(data) >= 1 && data[0]>>4 == flv.FRAME_TYPE_KEY
 }

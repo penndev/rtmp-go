@@ -16,7 +16,9 @@ func (srv *Serve) handlePublish(conn *Conn) error {
 		return err
 	}
 	path := conn.App + "/" + conn.Stream
-	log.Printf("%s publishing path=%s", conn.nc.RemoteAddr(), path)
+	log.Printf(
+		"%s publishing path=%s conn.App=%s conn.Stream=%s",
+		conn.nc.RemoteAddr(), path, conn.App, conn.Stream)
 	topic := pubsub.PubTopic(path)
 
 	defer topic.Close()

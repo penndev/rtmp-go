@@ -1,7 +1,9 @@
 package rtmp
 
 import (
+	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"strings"
 
@@ -14,7 +16,13 @@ import (
 func AdapterFlv(path string, sub *pubsub.Subscription) {
 	defer sub.Close()
 
-	file, err := os.OpenFile("runtime/"+strings.ReplaceAll(path, "/", "-")+".flv", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	u, err := url.Parse(path)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	name := strings.ReplaceAll(strings.Trim(u.Path, "/"), "/", "-")
+	file, err := os.OpenFile(fmt.Sprintf("runtime/%s.flv", name), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
 		log.Println(err)
 		return
