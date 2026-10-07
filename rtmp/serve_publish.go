@@ -5,25 +5,22 @@ import (
 
 	"github.com/penndev/rtmp/amf"
 	"github.com/penndev/rtmp/pubsub"
+	"github.com/penndev/rtmp/rtmp/adapter"
 )
 
 // publish: reply + Stream Begin, then fan-out AV via pubsub until publisher closes
 func (srv *Serve) handlePublish(conn *Conn) error {
-	if err := conn.PublishReply(true); err != nil {
-		return err
-	}
 	if err := conn.StreamBegin(uint32(conn.StreamID)); err != nil {
 		return err
 	}
-	path := conn.App + "/" + conn.Stream
 	log.Printf(
-		"%s publishing path=%s conn.App=%s conn.Stream=%s",
-		conn.nc.RemoteAddr(), path, conn.App, conn.Stream)
-	topic := pubsub.PubTopic(path)
+		"%s publishing name=%s conn.App=%s conn.Stream=%s",
+		conn.nc.RemoteAddr(), conn.Name(), conn.App, conn.Stream)
+	topic := pubsub.PubTopic(conn.Name())
 
 	defer topic.Close()
 	// flv to runtime file
-	go AdapterFlv(path, topic.Subscribe())
+	go adapter.Capture(conn.Name(), topic)
 
 	for {
 		msg, err := conn.Read()

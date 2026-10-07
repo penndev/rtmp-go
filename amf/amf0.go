@@ -305,7 +305,7 @@ func (d *Decoder) readAMF0TypedObject() (TypedObject, error) {
 
 // Encode0 writes vals as consecutive AMF0 values.
 // Enhanced RTMP: prefer Object (not ECMAArray) when creating data.
-func Encode0(vals []Value) ([]byte, error) {
+func Encode0(vals ...Value) ([]byte, error) {
 	var out []byte
 	for _, v := range vals {
 		b, err := encode0(v)

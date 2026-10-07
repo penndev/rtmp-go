@@ -103,7 +103,7 @@ const (
 	AVC_PACKET_TYPE_END_OF_SEQUENCE byte = 2 // AVC end of sequence
 )
 
-type FlvTag interface {
+type TagReader interface {
 	Type() byte
 	Timestamp() uint32
 	Data() []byte

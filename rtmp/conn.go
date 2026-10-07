@@ -18,6 +18,10 @@ type Conn struct {
 	StreamID float64 // NetStream ID from createStream; 0 is reserved for NetConnection
 }
 
+func (c *Conn) Name() string {
+	return c.App + "-" + c.Stream
+}
+
 func (c *Conn) Connect() (*ConnectCommand, error) {
 	msg, err := c.Read()
 	if err != nil {
@@ -52,7 +56,7 @@ func (c *Conn) Connect() (*ConnectCommand, error) {
 }
 
 func (c *Conn) ConnectReply(cmd *ConnectCommand, success bool) error {
-	payload, err := amf.Encode0(ConnectBuild(cmd, success))
+	payload, err := amf.Encode0(ConnectBuild(cmd, success)...)
 	if err != nil {
 		return err
 	}
@@ -163,7 +167,7 @@ func (c *Conn) CreateStreamReply(cmd *CreateStreamCommand, streamID float64) err
 		return errors.New("createStream reply: Stream ID must not be 0 (reserved for NetConnection)")
 	}
 	c.StreamID = streamID
-	payload, err := amf.Encode0([]amf.Value{"_result", cmd.TransactionID, nil, streamID})
+	payload, err := amf.Encode0("_result", cmd.TransactionID, nil, streamID)
 	if err != nil {
 		return err
 	}
@@ -185,7 +189,7 @@ func (c *Conn) PublishReply(success bool) error {
 	} else {
 		res["code"] = "NetStream.Publish.BadName"
 	}
-	payload, err := amf.Encode0([]amf.Value{"onStatus", 0.0, nil, res})
+	payload, err := amf.Encode0("onStatus", 0.0, nil, res)
 	if err != nil {
 		return err
 	}
@@ -206,7 +210,7 @@ func (c *Conn) PlayReply(success bool) error {
 	} else {
 		res["code"] = "NetStream.Play.Failed"
 	}
-	payload, err := amf.Encode0([]amf.Value{"onStatus", 0, nil, res})
+	payload, err := amf.Encode0("onStatus", 0, nil, res)
 	if err != nil {
 		return err
 	}
@@ -244,7 +248,7 @@ func (c *Conn) PlayStop() error {
 		"code":        "NetStream.Play.Stop",
 		"description": "Stopped playing stream.",
 	}
-	payload, err := amf.Encode0([]amf.Value{"onStatus", 0.0, nil, res})
+	payload, err := amf.Encode0("onStatus", 0.0, nil, res)
 	if err != nil {
 		return err
 	}

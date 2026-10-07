@@ -9,8 +9,19 @@ import (
 	"github.com/penndev/rtmp/amf"
 )
 
+type Handler interface {
+	OnName(app, stream string) string
+
+	OnPublish(app, stream string) bool
+	OnPublishStop(app, stream string)
+
+	OnPlay(app, stream string) bool
+	OnPlayStop(app, stream string)
+}
+
 type Serve struct {
-	Addr string
+	Addr    string
+	Handler Handler
 }
 
 func (srv *Serve) handle(nc net.Conn) {
@@ -96,6 +107,10 @@ func (srv *Serve) handle(nc net.Conn) {
 					conn.Stream = s
 				}
 			}
+			if err := conn.PublishReply(true); err != nil {
+				log.Printf("%s PublishReply fail err[%s]", nc.RemoteAddr(), err.Error())
+				return
+			}
 			if err := srv.handlePublish(conn); err != nil {
 				log.Printf("%s handlePublish fail err[%s]", nc.RemoteAddr(), err.Error())
 			} else {
@@ -107,6 +122,10 @@ func (srv *Serve) handle(nc net.Conn) {
 				if s, ok := values[3].(string); ok {
 					conn.Stream = s
 				}
+			}
+			if err := conn.PlayReply(true); err != nil {
+				log.Printf("%s PlayReply fail err[%s]", nc.RemoteAddr(), err.Error())
+				return
 			}
 			if err := srv.handlePlay(conn); err != nil {
 				log.Printf("%s handlePlay fail err[%s]", nc.RemoteAddr(), err.Error())

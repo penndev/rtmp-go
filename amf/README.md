@@ -20,14 +20,14 @@ Action Message Format（AMF0 / AMF3）编解码库。
 // 解码 / 编码整段（连续多个值）
 vals, err := amf.Decode0(b) // AMF0；遇 0x11 则下一个值按 AMF3
 vals, err := amf.Decode3(b) // AMF3
-b, err := amf.Encode0(vals) // AMF0
-b, err := amf.Encode3(vals) // AMF3
+b, err := amf.Encode0(vals...) // AMF0
+b, err := amf.Encode3(vals...) // AMF3
 ```
 
 编解码成对使用（以 AMF0 为例）：
 
 ```go
-b, err := amf.Encode0([]amf.Value{"connect"})
+b, err := amf.Encode0("connect")
 if err != nil { ... }
 vals, err := amf.Decode0(b)
 if err != nil { ... }
@@ -46,10 +46,10 @@ if err != nil { ... }
 | Go | `nil` | `nil` |
 
 ```go
-b, _ := amf.Encode0([]amf.Value{nil})
+b, _ := amf.Encode0(nil)
 vals, _ := amf.Decode0(b) // vals[0] == nil
 
-b, _ = amf.Encode3([]amf.Value{nil})
+b, _ = amf.Encode3(nil)
 vals, _ = amf.Decode3(b) // vals[0] == nil
 ```
 
@@ -61,10 +61,10 @@ vals, _ = amf.Decode3(b) // vals[0] == nil
 | Go | `amf.Undefined{}` | `amf.Undefined{}` |
 
 ```go
-b, _ := amf.Encode0([]amf.Value{amf.Undefined{}})
+b, _ := amf.Encode0(amf.Undefined{})
 vals, _ := amf.Decode0(b) // vals[0] == amf.Undefined{}
 
-b, _ = amf.Encode3([]amf.Value{amf.Undefined{}})
+b, _ = amf.Encode3(amf.Undefined{})
 vals, _ = amf.Decode3(b)
 ```
 
@@ -76,10 +76,10 @@ vals, _ = amf.Decode3(b)
 | Go | `bool` | `bool` |
 
 ```go
-b, _ := amf.Encode0([]amf.Value{true})
+b, _ := amf.Encode0(true)
 vals, _ := amf.Decode0(b) // vals[0] == true
 
-b, _ = amf.Encode3([]amf.Value{false})
+b, _ = amf.Encode3(false)
 vals, _ = amf.Decode3(b) // vals[0] == false
 ```
 
@@ -93,10 +93,10 @@ IEEE-754 双精度。AMF0 叫 Number，AMF3 叫 Double，Go 侧统一为 `float6
 | Go | `float64` | `float64` |
 
 ```go
-b, _ := amf.Encode0([]amf.Value{1.5})
+b, _ := amf.Encode0(1.5)
 vals, _ := amf.Decode0(b) // vals[0] == 1.5
 
-b, _ = amf.Encode3([]amf.Value{1.5})
+b, _ = amf.Encode3(1.5)
 vals, _ = amf.Decode3(b)
 ```
 
@@ -108,10 +108,10 @@ vals, _ = amf.Decode3(b)
 | Go | `string` | `string` |
 
 ```go
-b, _ := amf.Encode0([]amf.Value{"connect"})
+b, _ := amf.Encode0("connect")
 vals, _ := amf.Decode0(b) // vals[0] == "connect"
 
-b, _ = amf.Encode3([]amf.Value{"connect"})
+b, _ = amf.Encode3("connect")
 vals, _ = amf.Decode3(b)
 ```
 
@@ -126,11 +126,11 @@ vals, _ = amf.Decode3(b)
 
 ```go
 o := amf.Object{"app": "live", "flashVer": "FMLE/3.0"}
-b, _ := amf.Encode0([]amf.Value{o})
+b, _ := amf.Encode0(o)
 vals, _ := amf.Decode0(b)
 obj := vals[0].(amf.Object) // obj["app"] == "live"
 
-b, _ = amf.Encode3([]amf.Value{o})
+b, _ = amf.Encode3(o)
 vals, _ = amf.Decode3(b)
 ```
 
@@ -144,11 +144,11 @@ vals, _ = amf.Decode3(b)
 | Go | `amf.Date{Millis, Timezone}` | `amf.Date{Millis}` |
 
 ```go
-b, _ := amf.Encode0([]amf.Value{amf.Date{Millis: 1e6, Timezone: 480}})
+b, _ := amf.Encode0(amf.Date{Millis: 1e6, Timezone: 480})
 vals, _ := amf.Decode0(b)
 d := vals[0].(amf.Date) // d.Millis == 1e6, d.Timezone == 480
 
-b, _ = amf.Encode3([]amf.Value{amf.Date{Millis: 1e6}})
+b, _ = amf.Encode3(amf.Date{Millis: 1e6})
 vals, _ = amf.Decode3(b)
 ```
 
@@ -167,14 +167,14 @@ doc := amf.XMLDocument(`<?xml version="1.0"?>
   <item id="1">hello</item>
 </root>`)
 
-b, err := amf.Encode0([]amf.Value{doc})
+b, err := amf.Encode0(doc)
 if err != nil { ... }
 vals, err := amf.Decode0(b)
 if err != nil { ... }
 got := vals[0].(amf.XMLDocument) // 内容与 doc 相同
 
 // AMF3 同理
-b, err = amf.Encode3([]amf.Value{doc})
+b, err = amf.Encode3(doc)
 vals, err = amf.Decode3(b)
 got = vals[0].(amf.XMLDocument)
 ```
@@ -191,7 +191,7 @@ got = vals[0].(amf.XMLDocument)
 ```go
 // AMF0
 in := amf.TypedObject{ClassName: "NetConnection", Fields: amf.Object{"code": "ok"}}
-b, _ := amf.Encode0([]amf.Value{in})
+b, _ := amf.Encode0(in)
 vals, _ := amf.Decode0(b)
 out := vals[0].(amf.TypedObject) // out.ClassName == "NetConnection"
 
@@ -201,7 +201,7 @@ in3 := amf.TypedObject{
     Keys: []string{"w"}, Values: []amf.Value{amf.Integer(10)},
     Dynamic: true, Fields: amf.Object{"extra": false},
 }
-b, _ = amf.Encode3([]amf.Value{in3})
+b, _ = amf.Encode3(in3)
 vals, _ = amf.Decode3(b)
 ```
 
@@ -214,7 +214,7 @@ vals, _ = amf.Decode3(b)
 关联数组。读侧请用 `AsObject`。
 
 ```go
-b, _ := amf.Encode0([]amf.Value{amf.ECMAArray{"width": 512.0}})
+b, _ := amf.Encode0(amf.ECMAArray{"width": 512.0})
 vals, _ := amf.Decode0(b)
 arr := vals[0].(amf.ECMAArray) // arr["width"] == 512.0
 ```
@@ -224,7 +224,7 @@ arr := vals[0].(amf.ECMAArray) // arr["width"] == 512.0
 定长稠密数组。
 
 ```go
-b, _ := amf.Encode0([]amf.Value{amf.StrictArray{"a", 1.0, true}})
+b, _ := amf.Encode0(amf.StrictArray{"a", 1.0, true})
 vals, _ := amf.Decode0(b)
 arr := vals[0].(amf.StrictArray) // len == 3
 ```
@@ -236,7 +236,7 @@ arr := vals[0].(amf.StrictArray) // len == 3
 ### Unsupported — `0x0d` — `amf.Unsupported`
 
 ```go
-b, _ := amf.Encode0([]amf.Value{amf.Unsupported{}})
+b, _ := amf.Encode0(amf.Unsupported{})
 vals, _ := amf.Decode0(b) // vals[0] == amf.Unsupported{}
 ```
 
@@ -250,7 +250,8 @@ vals, _ := amf.Decode0(b) // vals[0] == amf.Unsupported{}
 
 ```go
 // 混合：前面 AMF0，碰到 0x11 后按 AMF3
-raw := append([]byte{0x11}, mustEncode3([]amf.Value{amf.Integer(1)})...)
+b, _ := amf.Encode3(amf.Integer(1))
+raw := append([]byte{0x11}, b...)
 vals, err := amf.Decode0(raw) // vals[0] == amf.Integer(1)
 ```
 
@@ -265,7 +266,7 @@ vals, err := amf.Decode0(raw) // vals[0] == amf.Integer(1)
 ### Integer — `0x04` — `amf.Integer`（`int32`，29-bit 有符号）
 
 ```go
-b, _ := amf.Encode3([]amf.Value{amf.Integer(-1)})
+b, _ := amf.Encode3(amf.Integer(-1))
 vals, _ := amf.Decode3(b) // vals[0] == amf.Integer(-1)
 ```
 
@@ -276,7 +277,7 @@ vals, _ := amf.Decode3(b) // vals[0] == amf.Integer(-1)
 与 `XMLDocument`（xml-doc）不同 marker。同样是 XML 文本，只是 AMF3 里另一种类型。
 
 ```go
-b, _ := amf.Encode3([]amf.Value{amf.XML(`<node id="1"/>`)})
+b, _ := amf.Encode3(amf.XML(`<node id="1"/>`))
 vals, _ := amf.Decode3(b)
 x := vals[0].(amf.XML) // `<node id="1"/>`
 ```
@@ -290,7 +291,7 @@ in := amf.Array{
     Dense: []amf.Value{true, false},
     Assoc: amf.Object{"a": amf.Integer(1)},
 }
-b, _ := amf.Encode3([]amf.Value{in})
+b, _ := amf.Encode3(in)
 vals, _ := amf.Decode3(b)
 arr := vals[0].(amf.Array)
 ```
@@ -298,7 +299,7 @@ arr := vals[0].(amf.Array)
 ### ByteArray — `0x0c` — `amf.ByteArray`
 
 ```go
-b, _ := amf.Encode3([]amf.Value{amf.ByteArray{0x10, 0x20}})
+b, _ := amf.Encode3(amf.ByteArray{0x10, 0x20})
 vals, _ := amf.Decode3(b)
 ba := vals[0].(amf.ByteArray) // []byte{0x10, 0x20}
 ```
@@ -306,37 +307,37 @@ ba := vals[0].(amf.ByteArray) // []byte{0x10, 0x20}
 ### VectorInt — `0x0d` — `amf.VectorInt`
 
 ```go
-b, _ := amf.Encode3([]amf.Value{amf.VectorInt{Fixed: true, Values: []int32{1, -2}}})
+b, _ := amf.Encode3(amf.VectorInt{Fixed: true, Values: []int32{1, -2}})
 vals, _ := amf.Decode3(b)
 ```
 
 ### VectorUint — `0x0e` — `amf.VectorUint`
 
 ```go
-b, _ := amf.Encode3([]amf.Value{amf.VectorUint{Values: []uint32{1, 2}}})
+b, _ := amf.Encode3(amf.VectorUint{Values: []uint32{1, 2}})
 vals, _ := amf.Decode3(b)
 ```
 
 ### VectorDouble — `0x0f` — `amf.VectorDouble`
 
 ```go
-b, _ := amf.Encode3([]amf.Value{amf.VectorDouble{Values: []float64{1.5, 2.5}}})
+b, _ := amf.Encode3(amf.VectorDouble{Values: []float64{1.5, 2.5}})
 vals, _ := amf.Decode3(b)
 ```
 
 ### VectorObject — `0x10` — `amf.VectorObject`
 
 ```go
-b, _ := amf.Encode3([]amf.Value{amf.VectorObject{TypeName: "*", Values: []amf.Value{true}}})
+b, _ := amf.Encode3(amf.VectorObject{TypeName: "*", Values: []amf.Value{true}})
 vals, _ := amf.Decode3(b)
 ```
 
 ### Dictionary — `0x11` — `amf.Dictionary`
 
 ```go
-b, _ := amf.Encode3([]amf.Value{amf.Dictionary{Entries: []amf.DictEntry{
+b, _ := amf.Encode3(amf.Dictionary{Entries: []amf.DictEntry{
     {Key: "k", Value: amf.Integer(1)},
-}}})
+}})
 vals, _ := amf.Decode3(b)
 ```
 

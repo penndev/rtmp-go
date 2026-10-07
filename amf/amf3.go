@@ -22,7 +22,7 @@ func Decode3(b []byte) ([]Value, error) {
 }
 
 // Encode3 encodes vals as consecutive AMF3 values.
-func Encode3(vals []Value) ([]byte, error) {
+func Encode3(vals ...Value) ([]byte, error) {
 	e := &encoder3{}
 	var out []byte
 	for _, v := range vals {

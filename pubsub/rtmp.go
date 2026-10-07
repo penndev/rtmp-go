@@ -38,7 +38,7 @@ func PubTopic(name string) *Topic {
 			return
 		}
 
-		raw, ok := msg.Data.(flv.FlvTag)
+		raw, ok := msg.Data.(flv.TagReader)
 		if !ok {
 			return
 		}
@@ -116,7 +116,7 @@ func SubTopic(name string) *Subscription {
 		sub.Write(audio)
 	}
 	sub.Filter = func(msg *Message) bool {
-		tag, ok := msg.Data.(flv.FlvTag)
+		tag, ok := msg.Data.(flv.TagReader)
 		if !ok || tag.Type() != flv.TAG_TYPE_VIDEO {
 			return false
 		}

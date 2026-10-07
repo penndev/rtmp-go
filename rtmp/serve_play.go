@@ -9,19 +9,18 @@ import (
 // play: reply + Stream Begin, send cached meta, forward AV;
 // on topic close send Stream EOF + Play.Stop
 func (srv *Serve) handlePlay(conn *Conn) error {
-	if err := conn.PlayReply(true); err != nil {
-		return err
-	}
+
 	if err := conn.StreamBegin(uint32(conn.StreamID)); err != nil {
 		return err
 	}
 
-	path := conn.App + "/" + conn.Stream
-	log.Printf("%s playing path=%s", conn.nc.RemoteAddr(), path)
+	log.Printf(
+		"%s playing name=%s conn.App=%s conn.Stream=%s",
+		conn.nc.RemoteAddr(), conn.Name(), conn.App, conn.Stream)
 
 	sid := uint32(conn.StreamID)
 
-	sub := pubsub.SubTopic(path)
+	sub := pubsub.SubTopic(conn.Name())
 	defer func() {
 		sub.Close()
 	}()
