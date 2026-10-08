@@ -7,21 +7,14 @@ import (
 	"net"
 
 	"github.com/penndev/rtmp/amf"
+	"github.com/penndev/rtmp/rtmp/handler"
+	"github.com/penndev/rtmp/rtmp/stream"
 )
-
-type Handler interface {
-	OnName(app, stream string) string
-
-	OnPublish(app, stream string) bool
-	OnPublishStop(app, stream string)
-
-	OnPlay(app, stream string) bool
-	OnPlayStop(app, stream string)
-}
 
 type Serve struct {
 	Addr    string
-	Handler Handler
+	Handler handler.Handler
+	Stream  stream.Stream
 }
 
 func (srv *Serve) handle(nc net.Conn) {
@@ -32,6 +25,14 @@ func (srv *Serve) handle(nc net.Conn) {
 			log.Printf("%s: %s", "recover: ", err)
 		}
 	}()
+
+	if srv.Handler == nil {
+		srv.Handler = handler.NewDefaultHandler()
+	}
+	if srv.Stream == nil {
+		log.Printf("%s stream is nil", nc.RemoteAddr())
+		return
+	}
 
 	conn := NewConn(nc)
 	// check rtmp handshake
@@ -107,11 +108,28 @@ func (srv *Serve) handle(nc net.Conn) {
 					conn.Stream = s
 				}
 			}
+			topic, err := srv.Stream.Publish(srv.Handler.OnName(conn.App, conn.Stream))
+			if err != nil {
+				log.Printf("%s publish rejected, %s app=%s stream=%s", nc.RemoteAddr(), err, conn.App, conn.Stream)
+				if err := conn.PublishReply(false); err != nil {
+					log.Printf("%s PublishReply fail err[%s]", nc.RemoteAddr(), err.Error())
+				}
+				return
+			}
+			defer topic.Close()
+			if !srv.Handler.OnPublish(conn.App, conn.Stream) {
+				log.Printf("%s publish rejected by handler app=%s stream=%s", nc.RemoteAddr(), conn.App, conn.Stream)
+				if err := conn.PublishReply(false); err != nil {
+					log.Printf("%s PublishReply fail err[%s]", nc.RemoteAddr(), err.Error())
+				}
+				return
+			}
+			defer srv.Handler.OnPublishStop(conn.App, conn.Stream)
 			if err := conn.PublishReply(true); err != nil {
 				log.Printf("%s PublishReply fail err[%s]", nc.RemoteAddr(), err.Error())
 				return
 			}
-			if err := srv.handlePublish(conn); err != nil {
+			if err := srv.handlePublish(conn, topic); err != nil {
 				log.Printf("%s handlePublish fail err[%s]", nc.RemoteAddr(), err.Error())
 			} else {
 				log.Printf("%s handlePublish Finsh", nc.RemoteAddr())
@@ -123,11 +141,28 @@ func (srv *Serve) handle(nc net.Conn) {
 					conn.Stream = s
 				}
 			}
+			sub, err := srv.Stream.Play(srv.Handler.OnName(conn.App, conn.Stream))
+			if err != nil {
+				log.Printf("%s play rejected, %s app=%s stream=%s", nc.RemoteAddr(), err, conn.App, conn.Stream)
+				if err := conn.PlayReply(false); err != nil {
+					log.Printf("%s PlayReply fail err[%s]", nc.RemoteAddr(), err.Error())
+				}
+				return
+			}
+			defer sub.Close()
+			if !srv.Handler.OnPlay(conn.App, conn.Stream) {
+				log.Printf("%s play rejected by handler app=%s stream=%s", nc.RemoteAddr(), conn.App, conn.Stream)
+				if err := conn.PlayReply(false); err != nil {
+					log.Printf("%s PlayReply fail err[%s]", nc.RemoteAddr(), err.Error())
+				}
+				return
+			}
+			defer srv.Handler.OnPlayStop(conn.App, conn.Stream)
 			if err := conn.PlayReply(true); err != nil {
 				log.Printf("%s PlayReply fail err[%s]", nc.RemoteAddr(), err.Error())
 				return
 			}
-			if err := srv.handlePlay(conn); err != nil {
+			if err := srv.handlePlay(conn, sub); err != nil {
 				log.Printf("%s handlePlay fail err[%s]", nc.RemoteAddr(), err.Error())
 			} else {
 				log.Printf("%s handlePlay Finsh", nc.RemoteAddr())
@@ -141,6 +176,9 @@ func (srv *Serve) handle(nc net.Conn) {
 
 // rtmp server listen
 func (srv *Serve) Listen(address string) error {
+	if srv.Handler == nil {
+		srv.Handler = handler.NewDefaultHandler()
+	}
 	ln, err := net.Listen("tcp", address)
 	if err != nil {
 		return err
@@ -156,6 +194,6 @@ func (srv *Serve) Listen(address string) error {
 }
 
 // create new rtmp serve
-func New() *Serve {
-	return &Serve{}
+func New(h handler.Handler, streams stream.Stream) *Serve {
+	return &Serve{Handler: h, Stream: streams}
 }

@@ -1,5 +1,7 @@
 package rtmp
 
+import "github.com/penndev/rtmp/codec/flv"
+
 type MessageHeader struct {
 	Timestamp       uint32      // 绝对时间（读完一条消息后）
 	MessageLength   uint32      // 3 byte
@@ -17,6 +19,6 @@ type Message struct {
 	PayLoad []byte
 }
 
-func (m *Message) Type() byte        { return byte(m.MessageType) }
+func (m *Message) Type() flv.TagType { return flv.TagType(m.MessageType) }
 func (m *Message) Timestamp() uint32 { return m.MessageHeader.Timestamp }
 func (m *Message) Data() []byte      { return m.PayLoad }

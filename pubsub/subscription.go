@@ -4,20 +4,27 @@ import "sync"
 
 type Subscription struct {
 	topic *Topic
-	ch    chan *Message
+	ch    chan any
 
 	mu     sync.Mutex
 	closed bool
 
 	// Filter: return false to drop this message. nil means accept all.
-	Filter func(*Message) bool
+	Filter func(any) bool
 }
 
-func (s *Subscription) Chan() <-chan *Message {
+func NewSubscription(topic *Topic) *Subscription {
+	return &Subscription{
+		topic: topic,
+		ch:    make(chan any, 64),
+	}
+}
+
+func (s *Subscription) Chan() <-chan any {
 	return s.ch
 }
 
-func (s *Subscription) Write(msg *Message) {
+func (s *Subscription) Write(msg any) {
 	s.ch <- msg
 }
 

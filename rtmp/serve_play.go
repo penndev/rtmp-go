@@ -3,27 +3,23 @@ package rtmp
 import (
 	"log"
 
-	"github.com/penndev/rtmp/pubsub"
+	"github.com/penndev/rtmp/rtmp/stream"
 )
 
 // play: reply + Stream Begin, send cached meta, forward AV;
 // on topic close send Stream EOF + Play.Stop
-func (srv *Serve) handlePlay(conn *Conn) error {
+func (srv *Serve) handlePlay(conn *Conn, sub stream.Subscriber) error {
 
 	if err := conn.StreamBegin(uint32(conn.StreamID)); err != nil {
 		return err
 	}
 
+	name := srv.Handler.OnName(conn.App, conn.Stream)
 	log.Printf(
 		"%s playing name=%s conn.App=%s conn.Stream=%s",
-		conn.nc.RemoteAddr(), conn.Name(), conn.App, conn.Stream)
+		conn.nc.RemoteAddr(), name, conn.App, conn.Stream)
 
 	sid := uint32(conn.StreamID)
-
-	sub := pubsub.SubTopic(conn.Name())
-	defer func() {
-		sub.Close()
-	}()
 
 	errCh := make(chan error, 1)
 	go func() {
@@ -43,7 +39,7 @@ func (srv *Serve) handlePlay(conn *Conn) error {
 				conn.PlayStop()
 				return nil
 			}
-			msg, ok := m.Data.(*Message)
+			msg, ok := m.(*Message)
 			if !ok || msg == nil {
 				continue
 			}

@@ -18,10 +18,6 @@ type Conn struct {
 	StreamID float64 // NetStream ID from createStream; 0 is reserved for NetConnection
 }
 
-func (c *Conn) Name() string {
-	return c.App + "-" + c.Stream
-}
-
 func (c *Conn) Connect() (*ConnectCommand, error) {
 	msg, err := c.Read()
 	if err != nil {

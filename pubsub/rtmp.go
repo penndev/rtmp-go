@@ -1,44 +1,66 @@
 package pubsub
 
 import (
+	"errors"
 	"log"
 	"sync"
 
 	"github.com/penndev/rtmp/codec/flv"
+	"github.com/penndev/rtmp/rtmp/stream"
 )
 
-type FlvMeta struct {
-	FlvScriptData                   *Message
-	CodecID                         uint32
-	VideoDecoderConfigurationRecord *Message
-	SoundFormat                     uint32
-	AudioSpecificConfig             *Message
+type flvMeta struct {
+	FlvScriptData                   any
+	VideoDecoderConfigurationRecord any
+	AudioSpecificConfig             any
 }
 
-var (
-	flvMetaMu  sync.RWMutex
-	FlvMetaMap = make(map[string]*FlvMeta)
-)
+type Hub struct {
+	mu     sync.RWMutex
+	meta   map[string]*flvMeta
+	broker *Broker
+}
 
-var rtmpBroker *Broker = New()
+func NewRtmp() *Hub {
+	return &Hub{
+		meta:   make(map[string]*flvMeta),
+		broker: NewBroker(),
+	}
+}
 
-func PubTopic(name string) *Topic {
-	top := rtmpBroker.Topic(name)
-	flvMetaMu.Lock()
-	meta := &FlvMeta{}
-	FlvMetaMap[name] = meta
-	flvMetaMu.Unlock()
+func (h *Hub) Publish(name string) (stream.Publisher, error) {
+	h.mu.Lock()
+	if _, ok := h.meta[name]; ok {
+		h.mu.Unlock()
+		return nil, errors.New("already publishing")
+	}
+	meta := &flvMeta{}
+	h.meta[name] = meta
+	h.mu.Unlock()
+
+	top := h.broker.Topic(name)
+
+	top.OnClose = func() {
+		h.mu.Lock()
+		if h.meta[name] == meta {
+			delete(h.meta, name)
+		}
+		h.mu.Unlock()
+	}
 
 	initVideo := false
 	initAudio := false
 	initScript := false
-	top.BeforePublish = func(msg *Message) {
+	// action before publish
+	// handle h264 sps pps
+	// handle aac sequence header
+	top.BeforePublish = func(msg any) {
 		if initScript && initVideo && initAudio {
-			top.BeforePublish = nil
+			top.BeforePublish = nil // ！- action after publish
 			return
 		}
 
-		raw, ok := msg.Data.(flv.TagReader)
+		raw, ok := msg.(flv.TagReader)
 		if !ok {
 			return
 		}
@@ -52,20 +74,19 @@ func PubTopic(name string) *Topic {
 			if initScript {
 				return
 			}
-			flvMetaMu.Lock()
+			h.mu.Lock()
 			meta.FlvScriptData = msg
-			flvMetaMu.Unlock()
+			h.mu.Unlock()
 			initScript = true
 		case flv.TAG_TYPE_AUDIO:
 			if initAudio {
 				return
 			}
-			flvMetaMu.Lock()
-			meta.SoundFormat = uint32(tag.SoundFormat)
+			h.mu.Lock()
 			if tag.SoundFormat == flv.SOUND_FORMAT_AAC && tag.AACPacketType == flv.AAC_PACKET_TYPE_SEQUENCE_HEADER {
 				meta.AudioSpecificConfig = msg
 			}
-			flvMetaMu.Unlock()
+			h.mu.Unlock()
 			if tag.SoundFormat != flv.SOUND_FORMAT_AAC || tag.AACPacketType == flv.AAC_PACKET_TYPE_SEQUENCE_HEADER {
 				initAudio = true
 			}
@@ -73,60 +94,64 @@ func PubTopic(name string) *Topic {
 			if initVideo {
 				return
 			}
-			flvMetaMu.Lock()
-			meta.CodecID = uint32(tag.CodecID)
-			if tag.CodecID == flv.CODEC_ID_AVC && tag.AVCPacketType == flv.AVC_PACKET_TYPE_SEQUENCE_HEADER {
+			avcSeq := tag.CodecID == flv.CODEC_ID_AVC && tag.AVCPacketType == flv.AVC_PACKET_TYPE_SEQUENCE_HEADER
+			hevcSeq := tag.FourCC == flv.FOURCC_HEVC && tag.VideoPacketType == flv.VIDEO_PACKET_TYPE_SEQUENCE_START
+			h.mu.Lock()
+			if avcSeq || hevcSeq {
 				meta.VideoDecoderConfigurationRecord = msg
 			}
-			flvMetaMu.Unlock()
-			if tag.CodecID != flv.CODEC_ID_AVC || tag.AVCPacketType == flv.AVC_PACKET_TYPE_SEQUENCE_HEADER {
+			h.mu.Unlock()
+			if tag.CodecID == flv.CODEC_ID_AVC {
+				initVideo = avcSeq
+			} else if tag.FourCC == flv.FOURCC_HEVC {
+				initVideo = hevcSeq
+			} else {
 				initVideo = true
 			}
 		}
 	}
-	return top
+	return top, nil
 }
 
-func SubTopic(name string) *Subscription {
-	top := rtmpBroker.Topic(name)
-	sub := &Subscription{
-		topic: top,
-		ch:    make(chan *Message, 64),
-	}
-	flvMetaMu.RLock()
-	meta := FlvMetaMap[name]
-	var script, video, audio *Message
+func (h *Hub) Play(name string) (stream.Subscriber, error) {
+	h.mu.RLock()
+	meta := h.meta[name]
+	var head []any
 	if meta != nil {
-		script = meta.FlvScriptData
-		if meta.CodecID == uint32(flv.CODEC_ID_AVC) {
-			video = meta.VideoDecoderConfigurationRecord
+		head = []any{meta.FlvScriptData, meta.VideoDecoderConfigurationRecord, meta.AudioSpecificConfig}
+	}
+	h.mu.RUnlock()
+	if meta == nil {
+		return nil, errors.New("no stream")
+	}
+
+	top := h.broker.Topic(name)
+	sub := NewSubscription(top)
+	for _, m := range head {
+		if m != nil {
+			sub.Write(m)
 		}
-		if meta.SoundFormat == uint32(flv.SOUND_FORMAT_AAC) {
-			audio = meta.AudioSpecificConfig
-		}
 	}
-	flvMetaMu.RUnlock()
-	if script != nil {
-		sub.Write(script)
-	}
-	if video != nil {
-		sub.Write(video)
-	}
-	if audio != nil {
-		sub.Write(audio)
-	}
-	sub.Filter = func(msg *Message) bool {
-		tag, ok := msg.Data.(flv.TagReader)
-		if !ok || tag.Type() != flv.TAG_TYPE_VIDEO {
+	sub.Filter = func(msg any) bool {
+		raw, ok := msg.(flv.TagReader)
+		if !ok {
 			return false
 		}
-		data := tag.Data()
-		if len(data) < 1 || data[0]>>4 != flv.FRAME_TYPE_KEY {
+		tag, err := flv.FormatTag(raw.Type(), raw.Timestamp(), raw.Data(), nil)
+		if err != nil {
 			return false
 		}
+		if tag.TagType != flv.TAG_TYPE_VIDEO {
+			return false
+		}
+
+		if tag.FrameType != flv.FRAME_TYPE_KEY {
+			return false
+		}
+
 		sub.Filter = nil
 		return true
 	}
 	top.Attach(sub)
-	return sub
+	return sub, nil
 }

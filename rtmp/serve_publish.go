@@ -4,23 +4,18 @@ import (
 	"log"
 
 	"github.com/penndev/rtmp/amf"
-	"github.com/penndev/rtmp/pubsub"
-	"github.com/penndev/rtmp/rtmp/adapter"
+	"github.com/penndev/rtmp/rtmp/stream"
 )
 
 // publish: reply + Stream Begin, then fan-out AV via pubsub until publisher closes
-func (srv *Serve) handlePublish(conn *Conn) error {
+func (srv *Serve) handlePublish(conn *Conn, topic stream.Publisher) error {
 	if err := conn.StreamBegin(uint32(conn.StreamID)); err != nil {
 		return err
 	}
+	name := srv.Handler.OnName(conn.App, conn.Stream)
 	log.Printf(
 		"%s publishing name=%s conn.App=%s conn.Stream=%s",
-		conn.nc.RemoteAddr(), conn.Name(), conn.App, conn.Stream)
-	topic := pubsub.PubTopic(conn.Name())
-
-	defer topic.Close()
-	// flv to runtime file
-	go adapter.Capture(conn.Name(), topic)
+		conn.nc.RemoteAddr(), name, conn.App, conn.Stream)
 
 	for {
 		msg, err := conn.Read()
@@ -29,9 +24,9 @@ func (srv *Serve) handlePublish(conn *Conn) error {
 		}
 		switch msg.MessageType {
 		case Audio, Video:
-			topic.Publish(&pubsub.Message{Data: msg})
+			topic.Publish(msg)
 		case AMF0DataMessage, AMF3DataMessage:
-			topic.Publish(&pubsub.Message{Data: msg})
+			topic.Publish(msg)
 		case AMF0CommandMessage, AMF3CommandMessage:
 			var values []amf.Value
 			switch msg.MessageType {

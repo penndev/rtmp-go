@@ -7,7 +7,7 @@ type Broker struct {
 	topics map[string]*Topic
 }
 
-func New() *Broker {
+func NewBroker() *Broker {
 	return &Broker{topics: make(map[string]*Topic)}
 }
 

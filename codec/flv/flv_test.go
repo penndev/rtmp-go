@@ -67,3 +67,38 @@ func TestStreamRemux(t *testing.T) {
 		t.Fatalf("lastTS=%d", lastTS)
 	}
 }
+
+func TestFormatExVideo(t *testing.T) {
+	// keyframe + SequenceStart + av01
+	tag, err := FormatTag(TAG_TYPE_VIDEO, 0, []byte{0x90, 'a', 'v', '0', '1'}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !tag.IsExVideoHeader || tag.FrameType != FRAME_TYPE_KEY ||
+		tag.VideoPacketType != VIDEO_PACKET_TYPE_SEQUENCE_START || tag.FourCC != FOURCC_AV1 {
+		t.Fatalf("header=%+v", tag.VideoTagHeader)
+	}
+
+	// ModEx TimestampOffsetNano (0x00010f) then SequenceStart + vp09
+	tag, err = FormatTag(TAG_TYPE_VIDEO, 0, []byte{
+		0x97, 2, 0x00, 0x01, 0x0f, 0x00, 'v', 'p', '0', '9',
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tag.VideoPacketType != VIDEO_PACKET_TYPE_SEQUENCE_START || tag.FourCC != FOURCC_VP9 ||
+		tag.VideoTimestampNanoOffset != 0x10f {
+		t.Fatalf("modex=%+v", tag.VideoTagHeader)
+	}
+
+	// inter frame + CodedFrames + avc1, composition time 1
+	tag, err = FormatTag(TAG_TYPE_VIDEO, 0, []byte{
+		0xA1, 'a', 'v', 'c', '1', 0x00, 0x00, 0x01,
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tag.FourCC != FOURCC_AVC || tag.CompositionTime != 1 {
+		t.Fatalf("cts=%d fourcc=%s", tag.CompositionTime, tag.FourCC)
+	}
+}

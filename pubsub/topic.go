@@ -1,6 +1,10 @@
 package pubsub
 
-import "sync"
+import (
+	"sync"
+
+	"github.com/penndev/rtmp/rtmp/stream"
+)
 
 type Topic struct {
 	broker *Broker
@@ -11,10 +15,11 @@ type Topic struct {
 	closed bool
 
 	// process
-	BeforePublish func(*Message)
+	BeforePublish func(any)
+	OnClose       func()
 }
 
-func (t *Topic) Publish(msg *Message) {
+func (t *Topic) Publish(msg any) {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	if t.closed {
@@ -35,11 +40,8 @@ func (t *Topic) Publish(msg *Message) {
 	}
 }
 
-func (t *Topic) Subscribe() *Subscription {
-	s := &Subscription{
-		topic: t,
-		ch:    make(chan *Message, 64),
-	}
+func (t *Topic) Subscribe() stream.Subscriber {
+	s := NewSubscription(t)
 	t.Attach(s)
 	return s
 }
@@ -66,6 +68,7 @@ func (t *Topic) Close() {
 		return
 	}
 	t.closed = true
+	onClose := t.OnClose
 	subs := make([]*Subscription, 0, len(t.subs))
 	for s := range t.subs {
 		subs = append(subs, s)
@@ -82,12 +85,14 @@ func (t *Topic) Close() {
 		s.mu.Unlock()
 	}
 
-	if t.broker == nil {
-		return
+	if t.broker != nil {
+		t.broker.mu.Lock()
+		if t.broker.topics[t.name] == t {
+			delete(t.broker.topics, t.name)
+		}
+		t.broker.mu.Unlock()
 	}
-	t.broker.mu.Lock()
-	if t.broker.topics[t.name] == t {
-		delete(t.broker.topics, t.name)
+	if onClose != nil {
+		onClose()
 	}
-	t.broker.mu.Unlock()
 }

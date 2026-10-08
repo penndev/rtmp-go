@@ -6,6 +6,7 @@ import (
 	"io"
 
 	"github.com/penndev/rtmp/codec/h264"
+	"github.com/penndev/rtmp/codec/h265"
 )
 
 // E.4.2.1 Audio Tag Header
@@ -19,21 +20,32 @@ type AudioTagHeader struct {
 	// SoundType UB[1]
 	SoundType byte
 	// AACPacketType UI8: only if SoundFormat == 10 (AAC)
-	AACPacketType byte
+	AACPacketType AACPacketType
 }
 
 // E.4.3.1 Video Tag Header
 type VideoTagHeader struct {
 	// FrameType UB[4]
-	FrameType byte
+	FrameType FrameType
 	// CodecID UB[4]
-	CodecID byte
+	CodecID CodecID
 	// AVCPacketType UI8: only if CodecID == 7 (AVC)
-	AVCPacketType byte
+	AVCPacketType AVCPacketType
 	// CompositionTime SI24: if AVCPacketType == 1 Composition time offset, else 0
 	CompositionTime int32
 
-	AVCDecoderConfigurationRecord h264.AVCDecoderConfigurationRecord
+	AVCDecoderConfigurationRecord  h264.AVCDecoderConfigurationRecord
+	HEVCDecoderConfigurationRecord h265.HEVCDecoderConfigurationRecord
+
+	// enhanced-rtmp-v2 Table: Extended VideoTagHeader
+	IsExVideoHeader          bool
+	VideoPacketType          VideoPacketType
+	FourCC                   FourCC
+	VideoCommand             VideoCommand
+	IsVideoMultitrack        bool
+	AvMultitrackType         AvMultitrackType
+	VideoTrackID             byte
+	VideoTimestampNanoOffset uint32
 }
 
 // E.4.1 FLV Tag (+ trailing PreviousTagSize in Marshal/Unmarshal).
@@ -43,7 +55,7 @@ type Tag struct {
 	// Filter UB[1]: 0 = No pre-processing required
 	Filter byte
 	// TagType UB[5]: 8 = audio, 9 = video, 18 = script data
-	TagType byte
+	TagType TagType
 	// DataSize UI24: Number of bytes after StreamID to end of tag
 	DataSize uint32
 	// Timestamp SI32 ms = (TimestampExtended<<24) | Timestamp UI24
@@ -64,7 +76,7 @@ type Tag struct {
 func (t Tag) Marshal() []byte {
 	dataLen := len(t.Data)
 	out := make([]byte, 11+dataLen+4)
-	out[0] = (t.Reserved&0x03)<<6 | (t.Filter&0x01)<<5 | (t.TagType & 0x1f)
+	out[0] = (t.Reserved&0x03)<<6 | (t.Filter&0x01)<<5 | (byte(t.TagType) & 0x1f)
 	out[1] = byte(dataLen >> 16)
 	out[2] = byte(dataLen >> 8)
 	out[3] = byte(dataLen)
@@ -90,7 +102,7 @@ func (t *Tag) Unmarshal(b []byte) error {
 	}
 	t.Reserved = (b[0] >> 6) & 0x03
 	t.Filter = (b[0] >> 5) & 0x01
-	t.TagType = b[0] & 0x1f
+	t.TagType = TagType(b[0] & 0x1f)
 	t.DataSize = uint32(b[1])<<16 | uint32(b[2])<<8 | uint32(b[3])
 	t.Timestamp = uint32(b[7])<<24 | uint32(b[4])<<16 | uint32(b[5])<<8 | uint32(b[6])
 	t.StreamID = uint32(b[8])<<16 | uint32(b[9])<<8 | uint32(b[10])
@@ -112,7 +124,7 @@ func (t *Tag) ReadFrom(r io.Reader) (int64, error) {
 	n := int64(11)
 	t.Reserved = (hdr[0] >> 6) & 0x03
 	t.Filter = (hdr[0] >> 5) & 0x01
-	t.TagType = hdr[0] & 0x1f
+	t.TagType = TagType(hdr[0] & 0x1f)
 	t.DataSize = uint32(hdr[1])<<16 | uint32(hdr[2])<<8 | uint32(hdr[3])
 	t.Timestamp = uint32(hdr[7])<<24 | uint32(hdr[4])<<16 | uint32(hdr[5])<<8 | uint32(hdr[6])
 	t.StreamID = uint32(hdr[8])<<16 | uint32(hdr[9])<<8 | uint32(hdr[10])
@@ -139,84 +151,4 @@ func (t *Tag) WriteTo(w io.Writer) (int64, error) {
 	raw := t.Marshal()
 	n, err := w.Write(raw)
 	return int64(n), err
-}
-
-func FormatTag(tagType byte, timestamp uint32, data []byte, avcDecoderConfigurationRecord *h264.AVCDecoderConfigurationRecord) (*Tag, error) {
-	t := &Tag{
-		TagType:   tagType,
-		Timestamp: timestamp,
-		DataSize:  uint32(len(data)),
-		Data:      data,
-	}
-	switch tagType {
-	case TAG_TYPE_AUDIO:
-		if len(data) < 1 {
-			return nil, errors.New("flv: audio tag too short")
-		}
-		t.AudioTagHeader = AudioTagHeader{
-			SoundFormat: data[0] >> 4,
-			SoundRate:   (data[0] >> 2) & 0x03,
-			SoundSize:   (data[0] >> 1) & 0x01,
-			SoundType:   data[0] & 0x01,
-		}
-		if t.SoundFormat == SOUND_FORMAT_AAC {
-			if len(data) < 2 {
-				return nil, errors.New("flv: AAC audio tag too short")
-			}
-			t.AACPacketType = data[1]
-		}
-	case TAG_TYPE_VIDEO:
-		if len(data) < 1 {
-			return nil, errors.New("flv: video tag too short")
-		}
-		t.VideoTagHeader = VideoTagHeader{
-			FrameType: data[0] >> 4,
-			CodecID:   data[0] & 0x0f,
-		}
-		if t.CodecID == CODEC_ID_AVC {
-			if len(data) < 5 {
-				return nil, errors.New("flv: AVC video tag too short")
-			}
-			t.AVCPacketType = data[1]
-			cts := uint32(data[2])<<16 | uint32(data[3])<<8 | uint32(data[4])
-			if cts&0x800000 != 0 {
-				cts |= 0xff000000 // sign-extend SI24
-			}
-			t.CompositionTime = int32(cts)
-			switch t.AVCPacketType {
-			case AVC_PACKET_TYPE_SEQUENCE_HEADER:
-				var err error
-				t.AVCDecoderConfigurationRecord, err = h264.FormatAVCDecoderConfigurationRecord(data[5:])
-				if err != nil {
-					return nil, err
-				}
-			case AVC_PACKET_TYPE_NALU:
-				if avcDecoderConfigurationRecord == nil {
-					return nil, errors.New("flv: missing AVCDecoderConfigurationRecord")
-				}
-				size := int(avcDecoderConfigurationRecord.LengthSizeMinusOne) + 1
-				payload := data[5:]
-				for len(payload) >= size {
-					l := 0
-					for i := 0; i < size; i++ {
-						l = l<<8 | int(payload[i])
-					}
-					payload = payload[size:]
-					if len(payload) < l {
-						return nil, errors.New("flv: truncated NAL unit")
-					}
-					n, err := h264.FormatNalu(payload[:l])
-					if err != nil {
-						return nil, err
-					}
-					t.Nalu = append(t.Nalu, n)
-					payload = payload[l:]
-				}
-			}
-		}
-	case TAG_TYPE_SCRIPT_DATA:
-	default:
-		return nil, errors.New("flv: unknown tag type")
-	}
-	return t, nil
 }
