@@ -1,6 +1,3 @@
-// 当前代码都是根据rtmp协议文档进行实现
-// https://www.adobe.com/content/dam/acom/en/devnet/rtmp/pdf/rtmp_specification_1.0.pdf
-
 package rtmp
 
 import (
@@ -8,411 +5,329 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
-	"log"
-	"net"
 )
 
-// 默认ChunkSize
-const DefaultChunkSize = 128
-
-// 需要设置的chunksize写入的ChunkSize
-// 最小为128
-const SetChunkSize = 4096
-
-// csid Value 2 保留用作控制协议。
-const ChunkControlID = 2
-
-// csid value 3 默认都用作message消息流
-const ChunkMessageID = 3
-
-// caid value 4 默认用作新的媒体传输流使用
-const ChunkAVPackID = 4
-
-const DefaultStreamID = 5
-
-// rtmp message 消息头信息
-// 因为需要存储多路复用所以不包含消息体 payload.
-// 阅读官方详细说明  5.3.1.2.5. Common Header Fields  15 page
-type ChunkMessageHeader struct {
-	Timestamp       uint32 // 3 byte
-	MessageLength   uint32 // 3 byte
-	MessageTypeID   byte   // 1 byte
-	MessageStreamID uint32 // 4 byte
-	ExtendTimestamp uint32 // 4 byte
-}
-
-type Pack struct {
-	ChunkMessageHeader
-	PayLoad []byte
-}
-
-// Chunk 处理rtmp中底层的流数据
-// rtmp 协议文档中每个rtmp被分割为多个chunk
-// 阅读官方详细说明   5.3. Chunking   11 page
 type Chunk struct {
-	fmt  byte   //2 bit
-	csid uint32 //6 bit
-
-	// 多路复用读写的 csid 用
-	// 不同的 ChunkStreamID 会有不同的 MsgHeader
-	readChunkList  map[uint32]*ChunkMessageHeader
-	writeChunkList map[uint32]*ChunkMessageHeader
-
-	// 读写IO
 	r *bufio.Reader
 	w *bufio.Writer
 
-	//rtmp chunk 协议读取 chunk 限制大小
+	readStreamList  map[int]*Message
+	writeStreamList map[int]MessageHeader
+
 	readChunkSize  uint32
 	writeChunkSize uint32
+
+	// 5.4.3 / 5.4.4 acknowledgement accounting (uint32 wraps at 2^32)
+	bytesReceived uint32 // bytes read so far
+	bytesSent     uint32 // bytes written so far
+	ackWindowSize uint32 // peer Window Acknowledgement Size; 0 = do not ack
+	lastAckBytes  uint32 // bytesReceived at last Acknowledgement we sent
 }
 
-//从net.conn 读取数据，阻塞型函数
-func (chk *Chunk) Read(l int) ([]byte, error) {
+// 从net.conn 读取数据，阻塞型函数
+func (chk *Chunk) read(l int) ([]byte, error) {
 	buf := make([]byte, l)
 	_, err := io.ReadFull(chk.r, buf)
-	return buf, err
+	if err != nil {
+		return nil, err
+	}
+	chk.bytesReceived += uint32(l)
+	// 5.4.4: The receiving peer MUST send an Acknowledgement after
+	// receiving the indicated number of bytes since the last
+	// Acknowledgement was sent, or beginning of the session if no
+	// Acknowledgement has yet been sent.
+	if chk.ackWindowSize > 0 && chk.bytesReceived-chk.lastAckBytes >= chk.ackWindowSize {
+		payload := make([]byte, 4)
+		binary.BigEndian.PutUint32(payload, chk.bytesReceived)
+		if err := chk.Write(CSIDProtocolControl, 0, &Message{
+			MessageHeader: MessageHeader{MessageType: Acknowledgement},
+			PayLoad:       payload,
+		}); err != nil {
+			return nil, err
+		}
+		chk.lastAckBytes = chk.bytesReceived
+	}
+	return buf, nil
 }
 
-//写入到net.conn数据，并不一定会发送
-func (chk *Chunk) Write(buf []byte) error {
-	_, err := chk.w.Write(buf)
+// 写入到net.conn数据，并不一定会发送
+func (chk *Chunk) write(buf []byte) error {
+	n, err := chk.w.Write(buf)
+	chk.bytesSent += uint32(n)
 	return err
 }
 
-//读取Rtmp基础消息头
-//并进行分析Chunk[fmt,csid]
-func (chk *Chunk) readBasicHeader() error {
-	bs, err := chk.Read(1)
+// 5.3.1.2. Chunk Message Header
+// fmt 0 的 3 字节是绝对时间；fmt 1/2 是相对上一条的增量；fmt 3 不带时间戳，沿用上一次增量。
+// 同一条消息拆成多 chunk 时，只有第一片更新时间，后面的 fmt 3 不能再加一次。
+func (chk *Chunk) readMsgHeader(fmt int, csid int) error {
+	if _, ok := chk.readStreamList[csid]; !ok {
+		chk.readStreamList[csid] = &Message{}
+	}
+
+	timestamp := chk.readStreamList[csid].TimestampDelta
+	ext := chk.readStreamList[csid].HasExtendTimestamp
+	if fmt <= 2 {
+		buf, err := chk.read(3)
+		if err != nil {
+			return err
+		}
+		timestamp = uint32(buf[0])<<16 | uint32(buf[1])<<8 | uint32(buf[2])
+		ext = timestamp == 0xFFFFFF
+
+		//fmt type [0 1] MessageLength MessageType
+		if fmt <= 1 {
+			buf, err = chk.read(3)
+			if err != nil {
+				return err
+			}
+			chk.readStreamList[csid].MessageLength = uint32(buf[0])<<16 | uint32(buf[1])<<8 | uint32(buf[2])
+
+			buf, err = chk.read(1)
+			if err != nil {
+				return err
+			}
+			chk.readStreamList[csid].MessageType = MessageType(buf[0])
+		}
+		//fmt type 0 MessageStreamID
+		if fmt == 0 {
+			buf, err = chk.read(4)
+			if err != nil {
+				return err
+			}
+			chk.readStreamList[csid].MessageStreamID = binary.LittleEndian.Uint32(buf)
+		}
+	}
+	// 5.3.1.3. Extended Timestamp
+	if ext {
+		buf, err := chk.read(4)
+		if err != nil {
+			return err
+		}
+		timestamp = binary.BigEndian.Uint32(buf)
+	}
+
+	// 这条消息已经读了一部分：后续 chunk 只把 extended timestamp 从流里消费掉
+	if len(chk.readStreamList[csid].PayLoad) > 0 {
+		return nil
+	}
+
+	chk.readStreamList[csid].HasExtendTimestamp = ext
+	if fmt == 0 {
+		chk.readStreamList[csid].MessageHeader.Timestamp = timestamp
+		chk.readStreamList[csid].TimestampDelta = 0
+	} else {
+		chk.readStreamList[csid].TimestampDelta = timestamp
+	}
+	return nil
+}
+
+// 5.3.1.1. Chunk Basic Header
+func (chk *Chunk) readBasicHeader() (int, int, error) {
+	bs, err := chk.read(1)
 	if err != nil {
-		return err
+		return 0, 0, err
 	}
-	chk.fmt = bs[0] >> 6
-	chk.csid = uint32(bs[0] & 0x3f)
-	if chk.csid == 0 {
-		csid, err := chk.Read(1)
+	fmt := int(bs[0] >> 6)
+	csid := int(bs[0] & 0x3f)
+	switch csid {
+	case 0:
+		// Chunk stream IDs 64-319 can be encoded in the 2-byte form of the
+		// header. ID is computed as (the second byte + 64).
+		csidBytes, err := chk.read(1)
 		if err != nil {
-			return err
+			return 0, 0, err
 		}
-		chk.csid = 64 + uint32(csid[0])
-	} else if chk.csid == 1 {
-		csid, err := chk.Read(2)
+		csid = 64 + int(csidBytes[0])
+	case 1:
+		// 	Chunk stream IDs 64-65599 can be encoded in the 3-byte version of
+		//  this field. ID is computed as ((the third byte)*256 + (the second
+		//  byte) + 64).
+		csidBytes, err := chk.read(2)
 		if err != nil {
-			return err
+			return 0, 0, err
 		}
-		chk.csid = uint32(64 + csid[0] + csid[1]*255)
+		csid = 64 + int(csidBytes[0]) + (int(csidBytes[1]) << 8)
+	default:
+		// csid keep
 	}
-	return nil
-}
-
-// 制作基础消息头
-func (chk *Chunk) writeBasicHeader(basicFmt byte, csid uint32) []byte {
-	load := make([]byte, 3)
-	if csid < 64 {
-		load[0] = byte(csid + uint32(basicFmt<<6))
-		return load[:1]
-	} else if csid < 320 {
-		load[0] = byte(0 + (basicFmt << 6))
-		load[1] = byte(csid - 64)
-		return load[:2]
-	} else if csid < 65510 {
-		load[0] = byte(1 + (basicFmt << 6))
-		Second := csid - 64
-		if Second > 255 {
-			load[1] = byte(Second % 256)
-			load[2] = byte(Second / 256)
-		} else {
-			load[1] = byte(Second)
-		}
-		return load
-	}
-	log.Println("chunk csid 不合理，请检查")
-	return nil
-}
-
-// 根据 fmt 来处理获取message Header
-func (chk *Chunk) readMsgHeader() error {
-	var err error
-	var tmp []byte
-	if chk.fmt == 3 {
-		return nil
-	}
-	if _, ok := chk.readChunkList[chk.csid]; !ok {
-		chk.readChunkList[chk.csid] = &ChunkMessageHeader{}
-	}
-	//fmt type=[0 1 2]  have Timestamp
-	if chk.fmt < 3 {
-		if tmp, err = chk.Read(3); err != nil {
-			return err
-		}
-		timestamp := make([]byte, 4)
-		copy(timestamp[1:], tmp)
-		chk.readChunkList[chk.csid].Timestamp = binary.BigEndian.Uint32(timestamp)
-	}
-	//fmt type [0 1] MessageLength MessageType
-	if chk.fmt < 2 {
-		messagelength := make([]byte, 4)
-		if tmp, err = chk.Read(3); err != nil {
-			return err
-		}
-		copy(messagelength[1:], tmp)
-		chk.readChunkList[chk.csid].MessageLength = binary.BigEndian.Uint32(messagelength)
-
-		if tmp, err = chk.Read(1); err != nil {
-			return err
-		}
-		chk.readChunkList[chk.csid].MessageTypeID = tmp[0]
-	}
-	//fmt type 0 MessageStreamID
-	if chk.fmt < 1 {
-		if tmp, err = chk.Read(4); err != nil {
-			return err
-		}
-		chk.readChunkList[chk.csid].MessageStreamID = binary.LittleEndian.Uint32(tmp)
-	}
-	//判断时间拓展字段是否存在
-	if chk.readChunkList[chk.csid].Timestamp == 0xFFFFFF {
-		if tmp, err = chk.Read(4); err != nil {
-			return err
-		}
-		chk.readChunkList[chk.csid].ExtendTimestamp = binary.BigEndian.Uint32(tmp)
-	}
-	return nil
-}
-
-// 制作消息头
-func (chk *Chunk) rspMsgHeader(basicFmt byte, csid uint32) []byte {
-	if basicFmt > 2 {
-		return nil
-	}
-	headByte := make([]byte, 15)
-	headLen := 0
-	// Type 0 - 1 - 2 had Timestamp
-	if basicFmt < 3 {
-		readTime := make([]byte, 4)
-		binary.BigEndian.PutUint32(readTime, chk.writeChunkList[csid].Timestamp)
-		copy(headByte[:3], readTime[1:])
-		headLen = 3
-	}
-	// type 0 - 1 had MessageLength and MessageType
-	if basicFmt < 2 {
-		readLen := make([]byte, 4)
-		binary.BigEndian.PutUint32(readLen, chk.writeChunkList[csid].MessageLength)
-		copy(headByte[3:6], readLen[1:])
-		headByte[6] = chk.writeChunkList[csid].MessageTypeID
-		headLen = 7
-	}
-	// type 0 had steam id
-	if basicFmt < 1 {
-		readSteamid := make([]byte, 4)
-		binary.BigEndian.PutUint32(readSteamid, chk.writeChunkList[csid].MessageStreamID)
-		copy(headByte[7:11], readSteamid)
-		headLen = 11
-	}
-
-	if chk.writeChunkList[csid].Timestamp == 0xFFFFFF {
-		readExtedtime := make([]byte, 4)
-		binary.BigEndian.PutUint32(readExtedtime, chk.writeChunkList[csid].ExtendTimestamp)
-		copy(headByte[12:15], readExtedtime)
-		headLen = 15
-	}
-	return headByte[:headLen]
+	return fmt, csid, nil
 }
 
 // 读取一条 Message
-// 一条消息可能是多条chunk消息
-// 返回一条原始的 Message
-func (chk *Chunk) readMsg() ([]byte, error) {
-	readedLen := uint32(0)
-	var payload []byte
+// 一条消息可能是多条 chunk，中间可能插其他 csid 的 chunk（如协议控制）
+// 按 csid 分别攒，哪个凑满就返回哪个
+func (chk *Chunk) readMessage() (Message, error) {
 	for {
-		if err := chk.readBasicHeader(); err != nil {
-			return nil, err
+		fmt, csid, err := chk.readBasicHeader()
+		if err != nil {
+			return Message{}, err
 		}
-		if err := chk.readMsgHeader(); err != nil {
-			return nil, err
+		if fmt > 3 {
+			return Message{}, errors.New("fmt > 3")
 		}
-
-		//处理剩余未读字节数
-		remaining := chk.readChunkList[chk.csid].MessageLength - readedLen
+		if err := chk.readMsgHeader(fmt, csid); err != nil {
+			return Message{}, err
+		}
+		readed := uint32(len(chk.readStreamList[csid].PayLoad))
+		remaining := chk.readStreamList[csid].MessageLength - readed
 		if remaining > chk.readChunkSize {
 			remaining = chk.readChunkSize
 		}
-		//\本次读取多少数据。
-		load, err := chk.Read(int(remaining))
+		load, err := chk.read(int(remaining))
+		if err != nil {
+			return Message{}, err
+		}
+		chk.readStreamList[csid].PayLoad = append(chk.readStreamList[csid].PayLoad, load...)
+
+		if uint32(len(chk.readStreamList[csid].PayLoad)) >= chk.readStreamList[csid].MessageLength {
+			chk.readStreamList[csid].MessageHeader.Timestamp += chk.readStreamList[csid].TimestampDelta
+			msg := *chk.readStreamList[csid]
+			chk.readStreamList[csid].PayLoad = nil
+			return msg, nil
+		}
+	}
+}
+
+// rtmp message filter control messages
+func (chk *Chunk) Read() (*Message, error) {
+	for {
+		msg, err := chk.readMessage()
 		if err != nil {
 			return nil, err
 		}
-		//叠加内容体
-		payload = append(payload, load...)
-		readedLen += remaining
-		//读取数据够数了。break =，panic >
-		if readedLen >= chk.readChunkList[chk.csid].MessageLength {
-			break
+
+		switch msg.MessageType {
+		case SetChunkSize:
+			// 5.4.1. Set Chunk Size (1)
+			// chunk size (31 bits): Valid sizes are 1 to 2147483647 (0x7FFFFFFF).
+			// The first bit MUST be zero.
+			if len(msg.PayLoad) < 4 {
+				return nil, errors.New("SetChunkSize: payload too short")
+			}
+			size := binary.BigEndian.Uint32(msg.PayLoad) & 0x7FFFFFFF
+			if size < 1 {
+				return nil, errors.New("SetChunkSize: size must be at least 1")
+			}
+			chk.readChunkSize = size
+		case AbortMessage:
+			// 5.4.2. Abort Message (2)
+			// chunk stream ID (32 bits): discard the partially received message.
+			if len(msg.PayLoad) < 4 {
+				return nil, errors.New("AbortMessage: payload too short")
+			}
+			csid := int(binary.BigEndian.Uint32(msg.PayLoad))
+			if m, ok := chk.readStreamList[csid]; ok {
+				m.PayLoad = nil
+			}
+		case Acknowledgement:
+			// 5.4.3. Acknowledgement (3)
+			// sequence number (32 bits): This field holds the number of
+			// bytes received so far (by the peer) — compare with bytesSent.
+			if len(msg.PayLoad) < 4 {
+				return nil, errors.New("Acknowledgement: payload too short")
+			}
+			seq := binary.BigEndian.Uint32(msg.PayLoad)
+			if seq > chk.bytesSent {
+				return nil, errors.New("Acknowledgement: sequence exceeds bytes sent")
+			}
+		case WindowAcknowledgementSize:
+			// 5.4.4. Window Acknowledgement Size (5)
+			// The receiving peer MUST send an Acknowledgement after
+			// receiving the indicated number of bytes since the last
+			// Acknowledgement was sent.
+			if len(msg.PayLoad) < 4 {
+				return nil, errors.New("WindowAcknowledgementSize: payload too short")
+			}
+			chk.ackWindowSize = binary.BigEndian.Uint32(msg.PayLoad)
+		default:
+			return &msg, nil
 		}
 	}
-	return payload, nil
 }
 
-// 返回消息体
-// 对底层控制协议进行处理不直接返回。
-// 直接返回消息体
-func (chk *Chunk) handlesMsg() (Pack, error) {
-	//读取原始数据
-	payload, err := chk.readMsg()
-	if err != nil {
-		return Pack{}, err
+// writeBasicHeader 5.3.1.1
+func writeBasicHeader(fmt byte, csid int) []byte {
+	if csid < 64 {
+		return []byte{byte(csid) | (fmt << 6)}
 	}
-	// 协议控制消息。
-	switch int(chk.readChunkList[chk.csid].MessageTypeID) {
-	case 1:
-		chk.readChunkSize = binary.BigEndian.Uint32(payload)
-	case 2:
-		//log.Println("Abort Message (2)")
-	case 3:
-		// Acknowledgement (3) // 收到字节数对照
-		//log.Println("Acknowledgement (3)", payload)
-	case 5:
-		// Window Acknowledgement Size (5) // 发送数据对照
-		//log.Println("Window Acknowledgement Size (5)")
-	case 6:
-		// Set Peer Bandwidth (6) //限制传送速率
-		//log.Println("Set Peer Bandwidth (6)")
-	case 4:
-		//log.Println("user controle message 4")
-	default:
-		var pk Pack
-		pk.PayLoad = payload
-		pk.ChunkMessageHeader = *chk.readChunkList[chk.csid]
-		return pk, nil
+	if csid < 320 {
+		return []byte{fmt << 6, byte(csid - 64)}
 	}
-	return chk.handlesMsg()
+	n := csid - 64
+	return []byte{1 | (fmt << 6), byte(n), byte(n >> 8)}
 }
 
-func (chk *Chunk) sendMsg(MessageTypeID byte, csid uint32, Payload []byte) error {
+// writeMsgHeader 5.3.1.2
+func writeMsgHeader(fmt byte, h MessageHeader) []byte {
+	var buf []byte
+	if fmt < 3 {
+		ts := h.Timestamp
+		if ts >= 0xFFFFFF {
+			ts = 0xFFFFFF
+		}
+		buf = append(buf, byte(ts>>16), byte(ts>>8), byte(ts))
+	}
+	if fmt < 2 {
+		ml := h.MessageLength
+		buf = append(buf, byte(ml>>16), byte(ml>>8), byte(ml), byte(h.MessageType))
+	}
+	if fmt < 1 {
+		sid := make([]byte, 4)
+		binary.LittleEndian.PutUint32(sid, h.MessageStreamID)
+		buf = append(buf, sid...)
+	}
+	if h.Timestamp >= 0xFFFFFF {
+		ext := make([]byte, 4)
+		binary.BigEndian.PutUint32(ext, h.ExtendTimestamp)
+		buf = append(buf, ext...)
+	}
+	return buf
+}
+
+// Write 写出一条 RTMP message（绝对时间戳，fmt 0；csid 须 >= 2）
+func (chk *Chunk) Write(csid int, streamID uint32, msg *Message) error {
 	if csid < 2 {
-		return errors.New("sendMsg err:) scsid cant < 2, 0 and 1 cant used")
+		return errors.New("Write: csid must be >= 2")
 	}
+	abs := msg.MessageHeader.Timestamp
+	h := MessageHeader{
+		MessageType:     msg.MessageType,
+		MessageLength:   uint32(len(msg.PayLoad)),
+		MessageStreamID: streamID,
+	}
+	if abs >= 0xFFFFFF {
+		h.Timestamp = 0xFFFFFF
+		h.ExtendTimestamp = abs
+	} else {
+		h.Timestamp = abs
+	}
+	chk.writeStreamList[csid] = h
 
-	writefmt := byte(1)
-	if _, ok := chk.writeChunkList[csid]; !ok {
-		chk.writeChunkList[csid] = &ChunkMessageHeader{}
-		writefmt = 0
-	}
-	payloadLen := uint32(len(Payload))
-	chk.writeChunkList[csid].MessageTypeID = MessageTypeID
-	chk.writeChunkList[csid].MessageLength = payloadLen
-	//制作基础头
-	writed := uint32(0)
-	for {
-		//本次需要发送多少字节。
-		currenLen := chk.writeChunkSize
-		//剩余多少字节数据需要发送
-		remaining := payloadLen - writed
-		if remaining < currenLen {
-			currenLen = remaining
+	out := make([]byte, 0, 16+len(msg.PayLoad))
+	writed := 0
+	for writed < len(msg.PayLoad) {
+		n := int(chk.writeChunkSize)
+		if remain := len(msg.PayLoad) - writed; remain < n {
+			n = remain
 		}
-		//是否第一次发送
 		if writed == 0 {
-			chk.Write(chk.writeBasicHeader(writefmt, csid))
-			chk.Write(chk.rspMsgHeader(writefmt, csid))
+			out = append(out, writeBasicHeader(0, csid)...)
+			out = append(out, writeMsgHeader(0, h)...)
 		} else {
-			chk.Write(chk.writeBasicHeader(3, csid))
+			out = append(out, writeBasicHeader(3, csid)...)
+			// 5.3.1.3: 前面的 fmt 0 带了 extended timestamp，后续 fmt 3 也要带
+			if h.Timestamp >= 0xFFFFFF {
+				ext := make([]byte, 4)
+				binary.BigEndian.PutUint32(ext, h.ExtendTimestamp)
+				out = append(out, ext...)
+			}
 		}
-		chk.Write(Payload[writed:(writed + currenLen)])
-		chk.w.Flush()
-		//数据发送完成
-		writed += currenLen
-		if writed >= payloadLen {
-			break
-		}
+		out = append(out, msg.PayLoad[writed:writed+n]...)
+		writed += n
 	}
-	return nil
-}
-
-func (chk *Chunk) sendPack(csid uint32, pk Pack) error {
-	if csid < 2 {
-		return errors.New("sendMsg err:) scsid cant < 2, 0 and 1 cant used")
+	if err := chk.write(out); err != nil {
+		return err
 	}
-
-	writefmt := byte(1)
-	if _, ok := chk.writeChunkList[csid]; !ok {
-		chk.writeChunkList[csid] = &ChunkMessageHeader{}
-		writefmt = 0
-	}
-	payloadLen := uint32(len(pk.PayLoad))
-	chk.writeChunkList[csid].MessageTypeID = pk.MessageTypeID
-	chk.writeChunkList[csid].MessageLength = payloadLen
-	chk.writeChunkList[csid].Timestamp = pk.Timestamp
-	Payload := pk.PayLoad
-	//制作基础头
-	writed := uint32(0)
-	for {
-		//本次需要发送多少字节。
-		currenLen := chk.writeChunkSize
-		//剩余多少字节数据需要发送
-		remaining := payloadLen - writed
-		if remaining < currenLen {
-			currenLen = remaining
-		}
-		//是否第一次发送
-		if writed == 0 {
-			chk.Write(chk.writeBasicHeader(writefmt, csid))
-			chk.Write(chk.rspMsgHeader(writefmt, csid))
-		} else {
-			chk.Write(chk.writeBasicHeader(3, csid))
-		}
-		chk.Write(Payload[writed:(writed + currenLen)])
-		chk.w.Flush()
-		//数据发送完成
-		writed += currenLen
-		if writed >= payloadLen {
-			break
-		}
-	}
-	return nil
-}
-
-// - 底层协议控制传送速率
-func (chk *Chunk) setWindowAcknowledgementSize(size uint32) {
-	sizeByte := make([]byte, 4)
-	binary.BigEndian.PutUint32(sizeByte, size)
-	chk.sendMsg(5, 2, sizeByte)
-}
-
-// no message is larger than 16777215 bytes.
-func (chk *Chunk) setChunkSize(size uint32) error {
-	if size > 16777215 {
-		return errors.New("setChunkSize err:) set chunk size cant > 16777215")
-	}
-	sizeByte := make([]byte, 4)
-	binary.BigEndian.PutUint32(sizeByte, size)
-	chk.sendMsg(1, 2, sizeByte)
-	chk.writeChunkSize = size
-	return nil
-}
-
-func (chk *Chunk) setStreamBegin(streamID uint32) error {
-	streamContent := make([]byte, 6)
-	binary.BigEndian.PutUint32(streamContent[2:], streamID)
-	return chk.sendMsg(4, ChunkControlID, streamContent)
-}
-
-func (chk *Chunk) setStreamEof(streamID uint32) error {
-	streamContent := make([]byte, 6)
-	binary.BigEndian.PutUint16(streamContent[:2], 1)
-	binary.BigEndian.PutUint32(streamContent[2:], streamID)
-	return chk.sendMsg(4, ChunkControlID, streamContent)
-}
-
-// 创建 Chunk Stream
-func newChunk(c net.Conn) *Chunk {
-	return &Chunk{
-		r:              bufio.NewReader(c),
-		w:              bufio.NewWriter(c),
-		readChunkSize:  uint32(DefaultChunkSize),
-		writeChunkSize: uint32(DefaultChunkSize),
-		readChunkList:  make(map[uint32]*ChunkMessageHeader),
-		writeChunkList: make(map[uint32]*ChunkMessageHeader),
-	}
+	return chk.w.Flush()
 }

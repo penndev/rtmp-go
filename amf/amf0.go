@@ -2,200 +2,520 @@ package amf
 
 import (
 	"encoding/binary"
-	"log"
+	"errors"
+	"fmt"
 	"math"
-	"reflect"
 )
 
-//
-const (
-	TypeNumber        = 0x00
-	TypeBoolean       = 0x01
-	TypeString        = 0x02
-	TypeObject        = 0x03
-	TypeMovieclip     = 0x04 //保留类型未使用; reserved, not supported
-	TypeNull          = 0x05
-	TypeUndefined     = 0x06
-	TypeReference     = 0x07
-	TypeEcmaArray     = 0x08
-	TypeObjectEnd     = 0x09 //对象结尾
-	TypeStrictArray   = 0x0a
-	TypeDate          = 0x0b
-	TypeLongString    = 0x0c
-	TypeUnsupported   = 0x0d
-	TypeRecordset     = 0x0e //保留类型未使用; reserved, not supported xml-document-marker     =0x0f
-	TypeTypedObject   = 0x10
-	TypeAvmplusObject = 0x11 //切换到amf3
-)
-
-// Value 通用类型
-type Value interface{}
-
-// ReadNumber 读取double的值 8个字节
-func ReadNumber(bytes []byte) float64 {
-	bits := binary.BigEndian.Uint64(bytes[0:8])
-	float := math.Float64frombits(bits)
-	return float
-}
-
-// ReadBoolean 读取amf布尔值 1个字节
-func ReadBoolean(bytes []byte) bool {
-	if bytes[0] != 0 {
-		return true
+// Decode0 reads all consecutive AMF0 values from b.
+// AMF0AVMPlus (0x11) switches to AMF3 for the next value.
+func Decode0(b []byte) ([]Value, error) {
+	d := &Decoder{data: b}
+	var out []Value
+	for d.off < len(d.data) {
+		v, err := d.Decode0()
+		if err != nil {
+			return out, err
+		}
+		out = append(out, v)
 	}
-	return false
+	return out, nil
 }
 
-// ReadString 读取utf8字符 变长字节
-func ReadString(bytes []byte) string {
-	str := string(bytes)
-	return str
+// Decoder holds byte cursor and AMF0/AMF3 reference tables for one message.
+type Decoder struct {
+	data []byte
+	off  int
+
+	// AMF0 object references (0-based index into this table).
+	amf0Refs []Value
+
+	// AMF3 reference tables.
+	amf3Strings []string
+	amf3Objects []Value
+	amf3Traits  []amf3Trait
 }
 
-// ReadObject 读取对象类型
-func ReadObject(bytes []byte) map[string]Value {
+type amf3Trait struct {
+	className      string
+	externalizable bool
+	dynamic        bool
+	keys           []string
+}
 
-	obj := make(map[string]Value)
+func (d *Decoder) remain() int { return len(d.data) - d.off }
 
-	for len(bytes) > 0 {
-		var val Value
-		var end int
-
-		vStart := 2 + int(binary.BigEndian.Uint16(bytes[0:2]))
-		key := ReadString(bytes[2:vStart])
-
-		switch bytes[vStart] {
-		case TypeNumber:
-			end = vStart + 9
-			val = ReadNumber(bytes[vStart+1 : end])
-		case TypeString:
-			start := vStart + 3
-			end = start + int(binary.BigEndian.Uint16(bytes[vStart+1:start]))
-			val = ReadString(bytes[start:end])
-		case TypeBoolean:
-			start := vStart + 1
-			end = start + 1
-			val = ReadBoolean(bytes[start:end])
-		default:
-			log.Println("ReadObject:", vStart, bytes)
-			val = nil
-		}
-
-		if val == nil {
-			break
-		}
-
-		obj[key] = val
-		bytes = bytes[end:]
+func (d *Decoder) need(n int) error {
+	if d.remain() < n {
+		return errors.New("amf: unexpected end of data")
 	}
-	return obj
+	return nil
 }
 
-//ReadEcmaObject 读取定长类型
-func ReadEcmaObject(bytes []byte) (map[string]Value, int) {
-	obj := make(map[string]Value)
-	lenght := int(binary.BigEndian.Uint32(bytes[0:4]))
-	leng := 5 // 4byte len 1byte type
-	bytes = bytes[4:]
-
-	for lenght > 0 {
-
-		var val Value
-		var end int
-
-		vStart := 2 + int(binary.BigEndian.Uint16(bytes[0:2]))
-		key := ReadString(bytes[2:vStart])
-
-		switch bytes[vStart] {
-		case TypeNumber:
-			end = vStart + 9
-			val = ReadNumber(bytes[vStart+1 : end])
-		case TypeString:
-			start := vStart + 3
-			end = start + int(binary.BigEndian.Uint16(bytes[vStart+1:start]))
-			val = ReadString(bytes[start:end])
-		case TypeBoolean:
-			start := vStart + 1
-			end = start + 1
-
-			val = ReadBoolean(bytes[start:end])
-		default:
-			log.Println("ReadEcmaObject:", bytes)
-			val = nil
-		}
-
-		if val == nil {
-			break
-		}
-
-		obj[key] = val
-		leng += end
-		lenght--
-		bytes = bytes[end:]
+func (d *Decoder) u8() (byte, error) {
+	if err := d.need(1); err != nil {
+		return 0, err
 	}
-	return obj, leng + 3 // 009
+	v := d.data[d.off]
+	d.off++
+	return v, nil
 }
 
-// ReadNull 读取空类型
-func ReadNull() bool {
-	return false
+func (d *Decoder) u16() (uint16, error) {
+	if err := d.need(2); err != nil {
+		return 0, err
+	}
+	v := binary.BigEndian.Uint16(d.data[d.off:])
+	d.off += 2
+	return v, nil
 }
 
-// WriteNumber 写入数据
-func WriteNumber(s float64) []byte {
-	var val []byte
-	val = append(val, 0x00)
-
-	bits := math.Float64bits(s)
-	bytes := make([]byte, 8)
-	binary.BigEndian.PutUint64(bytes, bits)
-	val = append(val, bytes...)
-	return val
+func (d *Decoder) u32() (uint32, error) {
+	if err := d.need(4); err != nil {
+		return 0, err
+	}
+	v := binary.BigEndian.Uint32(d.data[d.off:])
+	d.off += 4
+	return v, nil
 }
 
-// WriteString 写字符串数据
-func WriteString(s string) []byte {
-	var val []byte
-	val = append(val, 0x02)
-	sbyte := []byte(s)
-	sLen := len(sbyte)
-	val = append(val, byte(sLen/256), byte(sLen%56))
-	val = append(val, sbyte...)
-	return val
+func (d *Decoder) f64() (float64, error) {
+	if err := d.need(8); err != nil {
+		return 0, err
+	}
+	bits := binary.BigEndian.Uint64(d.data[d.off:])
+	d.off += 8
+	return math.Float64frombits(bits), nil
 }
 
-// WriteBoolean 读取amf布尔值 1个字节
-func WriteBoolean(b bool) []byte {
-	if b {
-		return []byte{1, 1}
-	} else {
-		return []byte{1, 0}
+func (d *Decoder) bytes(n int) ([]byte, error) {
+	if err := d.need(n); err != nil {
+		return nil, err
+	}
+	b := d.data[d.off : d.off+n]
+	d.off += n
+	return b, nil
+}
+
+// Decode0 reads one AMF0-coded value.
+func (d *Decoder) Decode0() (Value, error) {
+	marker, err := d.u8()
+	if err != nil {
+		return nil, err
+	}
+	switch marker {
+	case AMF0Number:
+		return d.f64()
+	case AMF0Boolean:
+		b, err := d.u8()
+		if err != nil {
+			return nil, err
+		}
+		return b != 0, nil
+	case AMF0String:
+		return d.readAMF0String()
+	case AMF0Object:
+		return d.readAMF0Object()
+	case AMF0Movieclip:
+		return nil, errors.New("amf0: movieclip reserved")
+	case AMF0Null:
+		return nil, nil
+	case AMF0Undefined:
+		return Undefined{}, nil
+	case AMF0Reference:
+		idx, err := d.u16()
+		if err != nil {
+			return nil, err
+		}
+		if int(idx) >= len(d.amf0Refs) {
+			return nil, fmt.Errorf("amf0: bad reference %d", idx)
+		}
+		return d.amf0Refs[idx], nil
+	case AMF0ECMAArray:
+		return d.readAMF0ECMAArray()
+	case AMF0ObjectEnd:
+		return nil, errors.New("amf0: unexpected object-end")
+	case AMF0StrictArray:
+		return d.readAMF0StrictArray()
+	case AMF0Date:
+		return d.readAMF0Date()
+	case AMF0LongString:
+		return d.readAMF0LongString()
+	case AMF0Unsupported:
+		return Unsupported{}, nil
+	case AMF0Recordset:
+		return nil, errors.New("amf0: recordset reserved")
+	case AMF0XMLDocument:
+		s, err := d.readAMF0LongString()
+		if err != nil {
+			return nil, err
+		}
+		return XMLDocument(s), nil
+	case AMF0TypedObject:
+		return d.readAMF0TypedObject()
+	case AMF0AVMPlus:
+		// Enhanced RTMP / AMF0: next value is AMF3-coded.
+		return d.Decode3()
+	default:
+		return nil, fmt.Errorf("amf0: unknown marker 0x%02x", marker)
 	}
 }
 
-// WriteObject 写入对象
-func WriteObject(objs map[string]Value) []byte {
-	var res []byte
-	res = append(res, 0x03)
-	for i, v := range objs {
-		res = append(res, WriteString(i)[1:]...)
-		switch iType := v.(type) {
-		case string:
-			res = append(res, WriteString(iType)...)
-		case int:
-			res = append(res, WriteNumber(float64(iType))...)
-		case float64:
-			res = append(res, WriteNumber(iType)...)
-		case bool:
-			res = append(res, WriteBoolean(iType)...)
-		default:
-			log.Println("rtmp amf-WriteObject err:", iType, reflect.TypeOf(iType))
-		}
+func (d *Decoder) readAMF0String() (string, error) {
+	n, err := d.u16()
+	if err != nil {
+		return "", err
 	}
-	return append(res, 0, 0, TypeObjectEnd)
+	b, err := d.bytes(int(n))
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
 }
 
-// WriteNull 写入
-func WriteNull(v Value) []byte {
-	return []byte{5}
+func (d *Decoder) readAMF0LongString() (string, error) {
+	n, err := d.u32()
+	if err != nil {
+		return "", err
+	}
+	b, err := d.bytes(int(n))
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
+func (d *Decoder) readAMF0Object() (Object, error) {
+	obj := Object{}
+	d.amf0Refs = append(d.amf0Refs, obj)
+	for {
+		key, err := d.readAMF0String()
+		if err != nil {
+			return nil, err
+		}
+		if key == "" {
+			end, err := d.u8()
+			if err != nil {
+				return nil, err
+			}
+			if end != AMF0ObjectEnd {
+				return nil, errors.New("amf0: object missing end marker")
+			}
+			return obj, nil
+		}
+		v, err := d.Decode0()
+		if err != nil {
+			return nil, err
+		}
+		obj[key] = v
+	}
+}
+
+func (d *Decoder) readAMF0ECMAArray() (ECMAArray, error) {
+	// Count is approximate (Flash often lies); read until object-end.
+	if _, err := d.u32(); err != nil {
+		return nil, err
+	}
+	arr := ECMAArray{}
+	d.amf0Refs = append(d.amf0Refs, arr)
+	for {
+		key, err := d.readAMF0String()
+		if err != nil {
+			return nil, err
+		}
+		if key == "" {
+			end, err := d.u8()
+			if err != nil {
+				return nil, err
+			}
+			if end != AMF0ObjectEnd {
+				return nil, errors.New("amf0: ecma-array missing end marker")
+			}
+			return arr, nil
+		}
+		v, err := d.Decode0()
+		if err != nil {
+			return nil, err
+		}
+		arr[key] = v
+	}
+}
+
+func (d *Decoder) readAMF0StrictArray() (StrictArray, error) {
+	n, err := d.u32()
+	if err != nil {
+		return nil, err
+	}
+	arr := make(StrictArray, 0, n)
+	d.amf0Refs = append(d.amf0Refs, arr)
+	for i := uint32(0); i < n; i++ {
+		v, err := d.Decode0()
+		if err != nil {
+			return nil, err
+		}
+		arr = append(arr, v)
+	}
+	// Fix reference to point at final slice header (append may reallocate).
+	d.amf0Refs[len(d.amf0Refs)-1] = arr
+	return arr, nil
+}
+
+func (d *Decoder) readAMF0Date() (Date, error) {
+	ms, err := d.f64()
+	if err != nil {
+		return Date{}, err
+	}
+	tz, err := d.u16()
+	if err != nil {
+		return Date{}, err
+	}
+	return Date{Millis: ms, Timezone: int16(tz)}, nil
+}
+
+func (d *Decoder) readAMF0TypedObject() (TypedObject, error) {
+	name, err := d.readAMF0String()
+	if err != nil {
+		return TypedObject{}, err
+	}
+	fields := Object{}
+	to := TypedObject{ClassName: name, Fields: fields}
+	d.amf0Refs = append(d.amf0Refs, to)
+	for {
+		key, err := d.readAMF0String()
+		if err != nil {
+			return TypedObject{}, err
+		}
+		if key == "" {
+			end, err := d.u8()
+			if err != nil {
+				return TypedObject{}, err
+			}
+			if end != AMF0ObjectEnd {
+				return TypedObject{}, errors.New("amf0: typed-object missing end marker")
+			}
+			return to, nil
+		}
+		v, err := d.Decode0()
+		if err != nil {
+			return TypedObject{}, err
+		}
+		fields[key] = v
+	}
+}
+
+// Encode0 writes vals as consecutive AMF0 values.
+// Enhanced RTMP: prefer Object (not ECMAArray) when creating data.
+func Encode0(vals ...Value) ([]byte, error) {
+	var out []byte
+	for _, v := range vals {
+		b, err := encode0(v)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, b...)
+	}
+	return out, nil
+}
+
+// encode0 encodes one value as AMF0.
+func encode0(v Value) ([]byte, error) {
+	if v == nil {
+		return []byte{AMF0Null}, nil
+	}
+	switch x := v.(type) {
+	case Undefined:
+		return []byte{AMF0Undefined}, nil
+	case Unsupported:
+		return []byte{AMF0Unsupported}, nil
+	case bool:
+		if x {
+			return []byte{AMF0Boolean, 1}, nil
+		}
+		return []byte{AMF0Boolean, 0}, nil
+	case float64:
+		return encodeAMF0Number(x), nil
+	case float32:
+		return encodeAMF0Number(float64(x)), nil
+	case int:
+		return encodeAMF0Number(float64(x)), nil
+	case int8:
+		return encodeAMF0Number(float64(x)), nil
+	case int16:
+		return encodeAMF0Number(float64(x)), nil
+	case int32:
+		return encodeAMF0Number(float64(x)), nil
+	case int64:
+		return encodeAMF0Number(float64(x)), nil
+	case uint:
+		return encodeAMF0Number(float64(x)), nil
+	case uint8:
+		return encodeAMF0Number(float64(x)), nil
+	case uint16:
+		return encodeAMF0Number(float64(x)), nil
+	case uint32:
+		return encodeAMF0Number(float64(x)), nil
+	case uint64:
+		return encodeAMF0Number(float64(x)), nil
+	case string:
+		return encodeAMF0String(x), nil
+	case Object:
+		return encodeAMF0Object(x)
+	case map[string]Value:
+		return encodeAMF0Object(Object(x))
+	case map[string]interface{}:
+		o := Object{}
+		for k, vv := range x {
+			o[k] = vv
+		}
+		return encodeAMF0Object(o)
+	case ECMAArray:
+		return encodeAMF0ECMAArray(x)
+	case StrictArray:
+		return encodeAMF0StrictArray(x)
+	case []Value:
+		return encodeAMF0StrictArray(StrictArray(x))
+	case []interface{}:
+		a := make(StrictArray, len(x))
+		for i, vv := range x {
+			a[i] = vv
+		}
+		return encodeAMF0StrictArray(a)
+	case Date:
+		return encodeAMF0Date(x), nil
+	case XMLDocument:
+		return encodeAMF0XMLDocument(string(x)), nil
+	case TypedObject:
+		return encodeAMF0TypedObject(x)
+	case Integer:
+		return encodeAMF0Number(float64(x)), nil
+	default:
+		return nil, fmt.Errorf("amf0: cannot encode %T", v)
+	}
+}
+
+func encodeAMF0Number(f float64) []byte {
+	b := make([]byte, 9)
+	b[0] = AMF0Number
+	binary.BigEndian.PutUint64(b[1:], math.Float64bits(f))
+	return b
+}
+
+func encodeAMF0UTF8(s string) []byte {
+	sb := []byte(s)
+	if len(sb) > 0xffff {
+		// caller should use long string
+		sb = sb[:0xffff]
+	}
+	b := make([]byte, 2+len(sb))
+	binary.BigEndian.PutUint16(b, uint16(len(sb)))
+	copy(b[2:], sb)
+	return b
+}
+
+func encodeAMF0String(s string) []byte {
+	sb := []byte(s)
+	if len(sb) > 0xffff {
+		b := make([]byte, 5+len(sb))
+		b[0] = AMF0LongString
+		binary.BigEndian.PutUint32(b[1:], uint32(len(sb)))
+		copy(b[5:], sb)
+		return b
+	}
+	b := make([]byte, 1+2+len(sb))
+	b[0] = AMF0String
+	binary.BigEndian.PutUint16(b[1:], uint16(len(sb)))
+	copy(b[3:], sb)
+	return b
+}
+
+func encodeAMF0Object(obj Object) ([]byte, error) {
+	out := []byte{AMF0Object}
+	for k, v := range obj {
+		out = append(out, encodeAMF0UTF8(k)...)
+		ev, err := encode0(v)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, ev...)
+	}
+	out = append(out, 0x00, 0x00, AMF0ObjectEnd)
+	return out, nil
+}
+
+func encodeAMF0ECMAArray(arr ECMAArray) ([]byte, error) {
+	out := make([]byte, 5)
+	out[0] = AMF0ECMAArray
+	binary.BigEndian.PutUint32(out[1:], uint32(len(arr)))
+	for k, v := range arr {
+		out = append(out, encodeAMF0UTF8(k)...)
+		ev, err := encode0(v)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, ev...)
+	}
+	out = append(out, 0x00, 0x00, AMF0ObjectEnd)
+	return out, nil
+}
+
+func encodeAMF0StrictArray(arr StrictArray) ([]byte, error) {
+	out := make([]byte, 5)
+	out[0] = AMF0StrictArray
+	binary.BigEndian.PutUint32(out[1:], uint32(len(arr)))
+	for _, v := range arr {
+		ev, err := encode0(v)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, ev...)
+	}
+	return out, nil
+}
+
+func encodeAMF0Date(d Date) []byte {
+	b := make([]byte, 11)
+	b[0] = AMF0Date
+	binary.BigEndian.PutUint64(b[1:], math.Float64bits(d.Millis))
+	binary.BigEndian.PutUint16(b[9:], uint16(d.Timezone))
+	return b
+}
+
+func encodeAMF0XMLDocument(s string) []byte {
+	sb := []byte(s)
+	b := make([]byte, 5+len(sb))
+	b[0] = AMF0XMLDocument
+	binary.BigEndian.PutUint32(b[1:], uint32(len(sb)))
+	copy(b[5:], sb)
+	return b
+}
+
+func encodeAMF0TypedObject(t TypedObject) ([]byte, error) {
+	out := []byte{AMF0TypedObject}
+	out = append(out, encodeAMF0UTF8(t.ClassName)...)
+	// AMF0 uses Fields; if only AMF3 sealed Keys/Values present, merge into Fields for wire.
+	fields := t.Fields
+	if fields == nil {
+		fields = Object{}
+	}
+	if len(t.Keys) > 0 {
+		fields = Object{}
+		for k, v := range t.Fields {
+			fields[k] = v
+		}
+		for i, k := range t.Keys {
+			if i < len(t.Values) {
+				fields[k] = t.Values[i]
+			}
+		}
+	}
+	for k, v := range fields {
+		out = append(out, encodeAMF0UTF8(k)...)
+		ev, err := encode0(v)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, ev...)
+	}
+	out = append(out, 0x00, 0x00, AMF0ObjectEnd)
+	return out, nil
 }

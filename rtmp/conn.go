@@ -1,201 +1,269 @@
 package rtmp
 
 import (
+	"bufio"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"net"
 
-	"github.com/penndev/rtmp-go/amf"
+	"github.com/penndev/rtmp/amf"
 )
 
 type Conn struct {
-	chk *Chunk
-
-	App    string
-	Stream string
-
-	IsPublish bool
+	Chunk
+	nc       net.Conn
+	App      string  // from connect
+	Stream   string  // stream name from FCPublish / publish / play
+	StreamID float64 // NetStream ID from createStream; 0 is reserved for NetConnection
 }
 
-// 根据返回值处理连接是否继续
-// return true 继续下一步
-func (c *Conn) onConnect(app string) bool {
-	c.App = app
-	// fmt.Println("c.app ->", c.App)
-	return true
-}
-
-func (c *Conn) onPublish(stream string) bool {
-	//验证密钥。
-	// fmt.Println("c.stream ->", stream)
-	c.Stream = stream
-	c.IsPublish = true
-
-	// 验证必须可以才允许连接。
-
-	// addrs, _ := net.LookupHost(name)
-	// log.Print("传输了信号: ", addrs[0], ":1935/", c.App, "/", c.Stream)
-	// log.Print("RTMP播放地址: rtmp://", addrs[0], ":1935/", c.App, "/", c.Stream)
-	// log.Print("http-flv播放地址: http://", addrs[0], ":8080/", c.App, "/", c.Stream, ".flv")
-	return true
-}
-
-func (c *Conn) onPlay(stream string) bool {
-	c.Stream = stream
-	c.IsPublish = false
-	return true
-}
-
-func (c *Conn) handleConnect() error {
-	read := 0
-	for {
-		pk, err := c.chk.handlesMsg()
-		if err != nil {
-			return err
-		}
-		if pk.MessageTypeID != 20 {
-			return errors.New("netConnectionCommand err: cant handle type id" + fmt.Sprint(pk.MessageTypeID))
-		}
-		item := amf.Decode(pk.PayLoad)
-		switch item[0] {
-		case "connect":
-			read = 1
-			media, ok := item[2].(map[string]amf.Value)
-			if !ok {
-				return errors.New("netConnectionCommand connect err:) catn find media")
-			}
-			app, ok := media["app"].(string)
-			if !ok {
-				return errors.New("netConnectionCommand connect err:) cant find app")
-			}
-			stu := c.onConnect(app)
-			c.chk.setChunkSize(SetChunkSize)
-			c.chk.sendMsg(20, 3, respConnect(stu))
-			if !stu {
-				return errors.New("netConnectionCommand connect err:) cat conntect app " + app)
-			}
-			c.chk.setWindowAcknowledgementSize(2500000)
-		case "createStream":
-			tranId, ok := item[1].(float64)
-			if !ok {
-				return errors.New("netConnectionCommand createStream err:) cant find tranid")
-			}
-			c.chk.sendMsg(20, 3, respCreateStream(true, int(tranId), DefaultStreamID))
-			if read == 1 {
-				read = 2
-			} else {
-				return errors.New("netConnectionCommand err:) not do connect action")
-			}
-		case "releaseStream":
-		case "FCPublish":
-		default:
-			return errors.New("netConnectionCommand err: cant handle command->" + fmt.Sprint(item[0]))
-		}
-		if read == 2 {
-			break
-		}
+func (c *Conn) Connect() (*ConnectCommand, error) {
+	msg, err := c.Read()
+	if err != nil {
+		return nil, err
 	}
+	var values []amf.Value
+	switch msg.MessageType {
+	case AMF0CommandMessage:
+		values, err = amf.Decode0(msg.PayLoad)
+	case AMF3CommandMessage:
+		values, err = amf.Decode3(msg.PayLoad)
+	default:
+		return nil, fmt.Errorf("unknown message type: %d", msg.MessageType)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if len(values) == 0 {
+		return nil, errors.New("empty command message")
+	}
+
+	name, _ := values[0].(string)
+	if name != "connect" {
+		return nil, fmt.Errorf("unknown command: %s", name)
+	}
+	cmd, err := ConnectParse(values)
+	if err != nil {
+		return nil, err
+	}
+	c.App = cmd.CommandObject.App
+	return cmd, nil
+}
+
+func (c *Conn) ConnectReply(cmd *ConnectCommand, success bool) error {
+	payload, err := amf.Encode0(ConnectBuild(cmd, success)...)
+	if err != nil {
+		return err
+	}
+	// Command messages (20): typically chunk stream ID 3, message stream ID 0
+	return c.Write(CSIDCommand, 0, &Message{
+		MessageHeader: MessageHeader{MessageType: AMF0CommandMessage},
+		PayLoad:       payload,
+	})
+}
+
+// 5.4.1. Set Chunk Size (1)
+// The maximum chunk size defaults to 128 bytes, but the client or the
+// server can change this value, and updates its peer using this
+// message.
+func (c *Conn) SetChunkSize(size uint32) error {
+	// chunk size (31 bits): This field holds the new maximum chunk size,
+	// in bytes, which will be used for all of the sender’s subsequent
+	// chunks until further notice. Valid sizes are 1 to 2147483647
+	// (0x7FFFFFFF) inclusive; the first bit MUST be zero.
+	if size < 1 || size > 0x7FFFFFFF {
+		return errors.New("SetChunkSize: size must be 1..2147483647")
+	}
+	payload := make([]byte, 4)
+	binary.BigEndian.PutUint32(payload, size)
+	// Protocol control messages MUST have message stream ID 0 and be
+	// sent in chunk stream ID 2 (5.4).
+	if err := c.Write(CSIDProtocolControl, 0, &Message{
+		MessageHeader: MessageHeader{MessageType: SetChunkSize},
+		PayLoad:       payload,
+	}); err != nil {
+		return err
+	}
+	c.writeChunkSize = size
 	return nil
 }
 
-func (c *Conn) handleStream() error {
-	for {
-		pk, err := c.chk.handlesMsg()
-		if err != nil {
-			return err
-		}
-		if pk.MessageTypeID != 20 {
-			return errors.New("netStreamCommand err: cant handle type id" + fmt.Sprint(pk.MessageTypeID))
-		}
-		item := amf.Decode(pk.PayLoad)
-		switch item[0] {
-		case "publish":
-			streamId, ok := item[1].(float64)
-			if !ok {
-				return errors.New("netStreamCommand err: streamId error")
-			}
-			streamType, ok := item[4].(string)
-			if !ok || streamType != "live" {
-				return errors.New("netStreamCommand err: streamType error")
-			}
-			streamName, ok := item[3].(string)
-			if !ok {
-				return errors.New("netStreamCommand err: streamName error")
-			}
-			status := c.onPublish(streamName)
-			c.chk.sendMsg(20, 3, respPublish(status))
-			if !status {
-				return errors.New("netStreamCommand err: streamname checkout fail")
-			}
-			c.chk.setStreamBegin(uint32(streamId))
-			return nil
-		case "play":
-			streamName, ok := item[3].(string)
-			if !ok {
-				return errors.New("netStreamCommand play err: streamName error")
-			}
-			status := c.onPlay(streamName)
-			c.chk.sendMsg(20, 3, respPlay(status))
-			if !status {
-				return errors.New("netStreamCommand play err: streamname checkout fail")
-			}
-			return nil
-		}
-	}
+// 5.4.4. Window Acknowledgement Size (5)
+// The client or the server sends this message to inform the peer of
+// the window size to use between sending acknowledgements.
+func (c *Conn) SetWindowAcknowledgementSize(size uint32) error {
+	payload := make([]byte, 4)
+	binary.BigEndian.PutUint32(payload, size)
+	return c.Write(CSIDProtocolControl, 0, &Message{
+		MessageHeader: MessageHeader{MessageType: WindowAcknowledgementSize},
+		PayLoad:       payload,
+	})
 }
 
-func (c *Conn) handlePublishing(cb func(Pack)) error {
+// 5.4.5. Set Peer Bandwidth (6)
+// The client or the server sends this message to limit the output
+// bandwidth of its peer.
+// Limit Type: 0 - Hard, 1 - Soft, 2 - Dynamic.
+func (c *Conn) SetBandwidth(size uint32) error {
+	payload := make([]byte, 5)
+	binary.BigEndian.PutUint32(payload[:4], size)
+	payload[4] = 2 // Dynamic
+	return c.Write(CSIDProtocolControl, 0, &Message{
+		MessageHeader: MessageHeader{MessageType: SetPeerBandwidth},
+		PayLoad:       payload,
+	})
+}
+
+func (c *Conn) CreateStream() (*CreateStreamCommand, error) {
 	for {
-		pk, err := c.chk.handlesMsg()
+		msg, err := c.Read()
 		if err != nil {
-			return err
+			return nil, err
 		}
-		switch pk.MessageTypeID {
-		case 8, 9, 15, 18:
-			//不允许向已关闭的chan传输数据。
-			// fmt.Println("收到消息->", pk.MessageTypeID)
-			cb(pk)
-		case 20:
-			item := amf.Decode(pk.PayLoad)
-			switch item[0] {
-			case "FCUnpublish":
-			case "deleteStream":
-				return errors.New("handle deleteStream rtmp message")
-			default:
-				if ms, ok := item[0].(string); ok {
-					return errors.New("handle undefined rtmp message:" + ms)
-				} else {
-					return errors.New("handle undefined rtmp message")
+		var values []amf.Value
+		switch msg.MessageType {
+		case AMF0CommandMessage:
+			values, err = amf.Decode0(msg.PayLoad)
+		case AMF3CommandMessage:
+			values, err = amf.Decode3(msg.PayLoad)
+		default:
+			return nil, fmt.Errorf("unknown message type: %d", msg.MessageType)
+		}
+		if err != nil {
+			return nil, err
+		}
+		if len(values) == 0 {
+			return nil, errors.New("empty command message")
+		}
+		name, _ := values[0].(string)
+		switch name {
+		case "createStream":
+			return CreateStreamParse(values)
+		case "FCPublish":
+			// commandName, transactionId, null, streamName
+			if len(values) >= 4 {
+				if s, ok := values[3].(string); ok {
+					c.Stream = s
 				}
 			}
+			continue
+		case "releaseStream", "FCUnpublish":
+			continue
 		default:
-			return errors.New("handle undefined rtmp message type:" + fmt.Sprint(pk.MessageTypeID))
+			return nil, fmt.Errorf("unknown command: %s", name)
 		}
 	}
 }
 
-func (c *Conn) handlePlay(subscriberCh <-chan Pack) error {
-	clientCh := make(chan error)
-	go func() {
-		err := c.handlePublishing(func(pk Pack) {})
-		clientCh <- err
-	}()
-	for {
-		select {
-		case pk, ok := <-subscriberCh:
-			if !ok {
-				c.chk.setStreamEof(DefaultStreamID)
-				return errors.New("subscriber chan handle close")
-			}
-			c.chk.sendPack(DefaultStreamID, pk)
-		case clientCh := <-clientCh:
-			return clientCh
-		}
+// 7.2.1.3. createStream — server response
+// _result or _error, Transaction ID, Command Object (null), Stream ID
+func (c *Conn) CreateStreamReply(cmd *CreateStreamCommand, streamID float64) error {
+	if streamID == 0 {
+		return errors.New("createStream reply: Stream ID must not be 0 (reserved for NetConnection)")
 	}
+	c.StreamID = streamID
+	payload, err := amf.Encode0("_result", cmd.TransactionID, nil, streamID)
+	if err != nil {
+		return err
+	}
+	// createStream uses the default communication channel (message stream ID 0)
+	return c.Write(CSIDCommand, 0, &Message{
+		MessageHeader: MessageHeader{MessageType: AMF0CommandMessage},
+		PayLoad:       payload,
+	})
+}
+
+// 7.2.2.6. publish — server response onStatus
+func (c *Conn) PublishReply(success bool) error {
+	res := amf.Object{
+		"level":       "status",
+		"description": "Start publishing",
+	}
+	if success {
+		res["code"] = "NetStream.Publish.Start"
+	} else {
+		res["code"] = "NetStream.Publish.BadName"
+	}
+	payload, err := amf.Encode0("onStatus", 0.0, nil, res)
+	if err != nil {
+		return err
+	}
+	return c.Write(CSIDCommand, uint32(c.StreamID), &Message{
+		MessageHeader: MessageHeader{MessageType: AMF0CommandMessage},
+		PayLoad:       payload,
+	})
+}
+
+// 7.2.2.1. play — server response onStatus
+func (c *Conn) PlayReply(success bool) error {
+	res := amf.Object{
+		"level":       "status",
+		"description": "Start playing",
+	}
+	if success {
+		res["code"] = "NetStream.Play.Start"
+	} else {
+		res["code"] = "NetStream.Play.Failed"
+	}
+	payload, err := amf.Encode0("onStatus", 0, nil, res)
+	if err != nil {
+		return err
+	}
+	return c.Write(CSIDCommand, uint32(c.StreamID), &Message{
+		MessageHeader: MessageHeader{MessageType: AMF0CommandMessage},
+		PayLoad:       payload,
+	})
+}
+
+// 6.2. User Control Messages — Stream Begin (event type 0)
+func (c *Conn) StreamBegin(streamID uint32) error {
+	payload := make([]byte, 6)
+	binary.BigEndian.PutUint32(payload[2:], streamID)
+	return c.Write(CSIDProtocolControl, 0, &Message{
+		MessageHeader: MessageHeader{MessageType: UserControl},
+		PayLoad:       payload,
+	})
+}
+
+// 6.2. User Control Messages — Stream EOF (event type 1)
+func (c *Conn) StreamEOF(streamID uint32) error {
+	payload := make([]byte, 6)
+	binary.BigEndian.PutUint16(payload[:2], 1)
+	binary.BigEndian.PutUint32(payload[2:], streamID)
+	return c.Write(CSIDProtocolControl, 0, &Message{
+		MessageHeader: MessageHeader{MessageType: UserControl},
+		PayLoad:       payload,
+	})
+}
+
+// NetStream.Play.Stop — notify player the stream has ended
+func (c *Conn) PlayStop() error {
+	res := amf.Object{
+		"level":       "status",
+		"code":        "NetStream.Play.Stop",
+		"description": "Stopped playing stream.",
+	}
+	payload, err := amf.Encode0("onStatus", 0.0, nil, res)
+	if err != nil {
+		return err
+	}
+	return c.Write(CSIDCommand, uint32(c.StreamID), &Message{
+		MessageHeader: MessageHeader{MessageType: AMF0CommandMessage},
+		PayLoad:       payload,
+	})
 }
 
 func NewConn(nc net.Conn) *Conn {
 	return &Conn{
-		chk: newChunk(nc),
+		nc: nc,
+		Chunk: Chunk{
+			r:               bufio.NewReader(nc),
+			w:               bufio.NewWriter(nc),
+			readStreamList:  make(map[int]*Message),
+			writeStreamList: make(map[int]MessageHeader),
+			readChunkSize:   DEFAULT_CHUNK_SIZE,
+			writeChunkSize:  DEFAULT_CHUNK_SIZE,
+		},
 	}
 }

@@ -1,127 +1,186 @@
+// https://veovera.org/docs/legacy/rtmp-v1-0-spec.pdf
+
 package rtmp
 
 import (
 	"log"
 	"net"
-	"sync"
-	"time"
 
-	"github.com/penndev/rtmp-go/flag"
+	"github.com/penndev/rtmp/amf"
+	"github.com/penndev/rtmp/rtmp/handler"
+	"github.com/penndev/rtmp/rtmp/stream"
 )
 
-var logTemplate = `[Notify] 
-Rtmp new Publish [%s]
-- - - - Play List URL - - - -
-rtmp: rtmp://%s
-flv: http://%s
-hls: http://%s
-`
-
-type adapterListen func(string, <-chan Pack)
-
 type Serve struct {
-	mu    sync.RWMutex
-	Addr  string
-	Topic map[string]*PubSub
-
-	// 全局订阅器，所有新的推流都会被加入到这个队列。
-	Adapter []adapterListen
-}
-
-// 当有新的推送消息时。
-func (srv *Serve) newPublisher(topic string) *PubSub {
-	srv.mu.Lock()
-	defer srv.mu.Unlock()
-	ps := &PubSub{
-		buffer:     3,
-		timeout:    3 * time.Second,
-		subscriber: make(map[chan Pack]bool),
-		mediaInfo:  metaInfo{},
-	}
-	// 处理全局adapter listen
-	for _, adapterCallBack := range srv.Adapter {
-		ch := make(chan Pack)
-		go adapterCallBack(topic, ch)
-		ps.subscriber[ch] = true
-	}
-	srv.Topic[topic] = ps
-	return ps
-}
-
-// 播放客户端主动关闭
-func (srv *Serve) closePublisher(topic string) {
-	if ps, ok := srv.Topic[topic]; ok {
-		srv.mu.Lock()
-		defer srv.mu.Unlock()
-		ps.Close()
-		delete(srv.Topic, topic)
-	}
-}
-
-// 播放客户端获取实例。
-func (srv *Serve) getPublisher(topic string) (*PubSub, bool) {
-	if pubsub, ok := srv.Topic[topic]; ok {
-		return pubsub, true
-	} else {
-		return nil, false
-	}
+	Addr    string
+	Handler handler.Handler
+	Stream  stream.Stream
 }
 
 func (srv *Serve) handle(nc net.Conn) {
+	// log.Printf("rtmp handle %s", nc.RemoteAddr())
 	defer func() {
 		nc.Close()
 		if err := recover(); err != nil {
 			log.Printf("%s: %s", "recover: ", err)
 		}
 	}()
+
+	if srv.Handler == nil {
+		srv.Handler = handler.NewDefaultHandler()
+	}
+	if srv.Stream == nil {
+		log.Printf("%s stream is nil", nc.RemoteAddr())
+		return
+	}
+
+	conn := NewConn(nc)
 	// check rtmp handshake
-	if err := ServeHandShake(nc); err != nil {
+	if err := conn.Handshake(); err != nil {
 		log.Printf("%s ServeHandShake fail err[%s]", nc.RemoteAddr(), err.Error())
 		return
 	}
-	// create new rtmp conn
-	conn := NewConn(nc)
-	if err := conn.handleConnect(); err != nil {
-		log.Printf("%s handleConnect fail err[%s]", nc.RemoteAddr(), err.Error())
-		return
-	}
-	if err := conn.handleStream(); err != nil {
+	cmd, err := conn.Connect()
+	if err != nil {
 		log.Printf("%s handleStream fail err[%s]", nc.RemoteAddr(), err.Error())
 		return
 	}
-	if conn.IsPublish {
-		topic := conn.App + conn.Stream
-		log.Printf(
-			logTemplate,                          // 模板
-			topic,                                // 主题
-			flag.RtmpAddr+"/"+topic,              // rtmp 播放拼接
-			flag.HttpAddr+"/play.flv?top="+topic, // flv播放拼接
-			flag.HttpAddr+"/play.m3u8?top="+topic, // hls播放拼接
-		)
-		pubsub := srv.newPublisher(topic)
-		conn.handlePublishing(func(pk Pack) {
-			pubsub.Publish(pk)
-		})
-		srv.closePublisher(topic)
-	} else {
-		topic := conn.App + conn.Stream
-		if pubsub, ok := srv.getPublisher(topic); ok {
-			sch := pubsub.Subscription()
-			defer pubsub.SubscriptionClose(sch)
-			if err := conn.handlePlay(sch); err != nil {
-				log.Printf("%s: %s", "play fail", err)
-			}
-		} else {
-			log.Printf("rtmp %s not found", topic)
-			// 立即退出 defer nc.close
+	if err := conn.ConnectReply(cmd, true); err != nil {
+		log.Printf("%s ConnectReply fail err[%s]", nc.RemoteAddr(), err.Error())
+		return
+	}
+
+	if err := conn.SetWindowAcknowledgementSize(DEFAULT_WINDOW_ACK_SIZE); err != nil {
+		log.Printf("%s SetWindowAcknowledgementSize fail err[%s]", nc.RemoteAddr(), err.Error())
+		return
+	}
+	if err := conn.SetBandwidth(DEFAULT_PEER_BANDWIDTH); err != nil {
+		log.Printf("%s SetBandwidth fail err[%s]", nc.RemoteAddr(), err.Error())
+		return
+	}
+	if err := conn.SetChunkSize(PREFERRED_CHUNK_SIZE); err != nil {
+		log.Printf("%s SetChunkSize fail err[%s]", nc.RemoteAddr(), err.Error())
+		return
+	}
+
+	cs, err := conn.CreateStream()
+	if err != nil {
+		log.Printf("%s CreateStream fail err[%s]", nc.RemoteAddr(), err.Error())
+		return
+	}
+
+	if err := conn.CreateStreamReply(cs, DefaultNetStreamID); err != nil {
+		log.Printf("%s CreateStreamReply fail err[%s]", nc.RemoteAddr(), err.Error())
+		return
+	}
+
+	for {
+		msg, err := conn.Read()
+		if err != nil {
+			log.Printf("%s Read fail err[%s]", nc.RemoteAddr(), err.Error())
+			return
 		}
 
+		var values []amf.Value
+		switch msg.MessageType {
+		case AMF0CommandMessage:
+			values, err = amf.Decode0(msg.PayLoad)
+		case AMF3CommandMessage:
+			values, err = amf.Decode3(msg.PayLoad)
+		default:
+			log.Printf("%s unexpected message type=%d", nc.RemoteAddr(), msg.MessageType)
+			continue
+		}
+		if err != nil {
+			log.Printf("%s decode command fail err[%s]", nc.RemoteAddr(), err.Error())
+			return
+		}
+		if len(values) == 0 {
+			log.Printf("%s empty command message", nc.RemoteAddr())
+			continue
+		}
+		name, _ := values[0].(string)
+
+		switch name {
+		case "publish":
+			if len(values) >= 4 {
+				if s, ok := values[3].(string); ok {
+					conn.Stream = s
+				}
+			}
+			topic, err := srv.Stream.Publish(srv.Handler.OnName(conn.App, conn.Stream))
+			if err != nil {
+				log.Printf("%s publish rejected, %s app=%s stream=%s", nc.RemoteAddr(), err, conn.App, conn.Stream)
+				if err := conn.PublishReply(false); err != nil {
+					log.Printf("%s PublishReply fail err[%s]", nc.RemoteAddr(), err.Error())
+				}
+				return
+			}
+			defer topic.Close()
+			if !srv.Handler.OnPublish(conn.App, conn.Stream) {
+				log.Printf("%s publish rejected by handler app=%s stream=%s", nc.RemoteAddr(), conn.App, conn.Stream)
+				if err := conn.PublishReply(false); err != nil {
+					log.Printf("%s PublishReply fail err[%s]", nc.RemoteAddr(), err.Error())
+				}
+				return
+			}
+			defer srv.Handler.OnPublishStop(conn.App, conn.Stream)
+			if err := conn.PublishReply(true); err != nil {
+				log.Printf("%s PublishReply fail err[%s]", nc.RemoteAddr(), err.Error())
+				return
+			}
+			if err := srv.handlePublish(conn, topic); err != nil {
+				log.Printf("%s handlePublish fail err[%s]", nc.RemoteAddr(), err.Error())
+			} else {
+				// log.Printf("%s handlePublish Finsh", nc.RemoteAddr())
+			}
+			return
+		case "play":
+			if len(values) >= 4 {
+				if s, ok := values[3].(string); ok {
+					conn.Stream = s
+				}
+			}
+			sub, err := srv.Stream.Play(srv.Handler.OnName(conn.App, conn.Stream))
+			if err != nil {
+				log.Printf("%s play rejected, %s app=%s stream=%s", nc.RemoteAddr(), err, conn.App, conn.Stream)
+				if err := conn.PlayReply(false); err != nil {
+					log.Printf("%s PlayReply fail err[%s]", nc.RemoteAddr(), err.Error())
+				}
+				return
+			}
+			defer sub.Close()
+			if !srv.Handler.OnPlay(conn.App, conn.Stream) {
+				log.Printf("%s play rejected by handler app=%s stream=%s", nc.RemoteAddr(), conn.App, conn.Stream)
+				if err := conn.PlayReply(false); err != nil {
+					log.Printf("%s PlayReply fail err[%s]", nc.RemoteAddr(), err.Error())
+				}
+				return
+			}
+			defer srv.Handler.OnPlayStop(conn.App, conn.Stream)
+			if err := conn.PlayReply(true); err != nil {
+				log.Printf("%s PlayReply fail err[%s]", nc.RemoteAddr(), err.Error())
+				return
+			}
+			if err := srv.handlePlay(conn, sub); err != nil {
+				log.Printf("%s handlePlay fail err[%s]", nc.RemoteAddr(), err.Error())
+			} else {
+				log.Printf("%s handlePlay Finsh", nc.RemoteAddr())
+			}
+			return
+		case "getStreamLength":
+			// live ignore getStreamLength
+		default:
+			log.Printf("%s ignore netstream command: %s", nc.RemoteAddr(), name)
+		}
 	}
 }
 
-// 启动Tcp监听
-// 处理golang net ListenConfig 参数 - 做优化
+// rtmp server listen
 func (srv *Serve) Listen(address string) error {
+	if srv.Handler == nil {
+		srv.Handler = handler.NewDefaultHandler()
+	}
 	ln, err := net.Listen("tcp", address)
 	if err != nil {
 		return err
@@ -136,26 +195,7 @@ func (srv *Serve) Listen(address string) error {
 	}
 }
 
-// 处理全局适配器，用来监听所有的推送流。
-func (srv *Serve) AdapterRegister(al adapterListen) {
-	srv.mu.Lock()
-	srv.Adapter = append(srv.Adapter, al)
-	srv.mu.Unlock()
-}
-
-func (srv *Serve) SubscriptionTopic(topic string) (*PubSub, bool) {
-	if pubsub, ok := srv.Topic[topic]; ok {
-		return pubsub, true
-	} else {
-		return nil, false
-	}
-}
-
 // create new rtmp serve
-func NewRtmp() *Serve {
-	s := &Serve{
-		Topic:   make(map[string]*PubSub),
-		Adapter: []adapterListen{},
-	}
-	return s
+func New(h handler.Handler, stream stream.Stream) *Serve {
+	return &Serve{Handler: h, Stream: stream}
 }

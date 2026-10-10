@@ -1,37 +1,77 @@
-# rtmp-go
+# rtmp
 
-基于rtmp1.0协议开发的直播服务器
+The RTMP specification is now maintained by [Veovera](https://veovera.org/) rather than Adobe. This project follows their Enhanced RTMP extensions. Older builds are on the matching tags.
 
-- 推流协议 `rtmp`
-- 拉流（播放）
-    - rtmp 
-    - http-fly
-    - hls (m3u8)
+### Codecs
 
-## 直播录制功能
+- Classic RTMP / FLV: Sorenson H.263, H.264
+- Enhanced RTMP: H.264 (`avc1`), H.265 (`hvc1`)
 
-> 录制文件存放`runtime`目录下
+### Run
 
-## 推流
-
-- 使用ffmpeg进行rtmp推流
-    ```bash
-    ffmpeg -re -i <in.mp4> -vcodec h264 -acodec aac -f flv rtmp://localhost/live/room
-    ```
-
-- 使用obs studio进行rtmp推流
-    1. 进入 OBS Studio > **设置** > **直播**
-    2. 输入 **服务器**: `rtmp://127.0.0.1:1935/live/`
-    3. 输入 **推流码** `room`
-  
-
-## 播放
-
-**播放地址为 `rtmp Serve` 中 Topic 的key组成** (不同的推流工具组成的key可能会有不同，请留意控制台输出)
-
-使用 ffmpeg 播放器播放
-```
-> ffplay <urlpath>
+```bash
+go run . -rtmp 127.0.0.1:1935 -http 127.0.0.1:8080
 ```
 
-_或者使用其他支持相关视频格式的播放器进行播放_
+Open `http://127.0.0.1:8080/` in a browser. The page lists live streams. Each one has a copyable FLV address. HLS appears after a TS segment exists, so H.263 stays FLV only. It shows “No streams” when nothing is publishing. Refresh reloads the page.
+
+The default name is `app-stream`. Publishing to `rtmp://127.0.0.1:1935/live/room` gives:
+
+- `http://127.0.0.1:8080/live-room.flv`
+- `http://127.0.0.1:8080/live-room.m3u8`
+
+### Publish
+
+```bash
+ffmpeg -re -i in.mp4 -c:v libx264 -c:a aac -f flv rtmp://127.0.0.1:1935/live/room
+```
+
+OBS Studio: Settings → Stream, server `rtmp://127.0.0.1:1935/live/`, stream key `room`.
+
+### Play
+
+```bash
+ffplay http://127.0.0.1:8080/live-room.m3u8
+ffplay http://127.0.0.1:8080/live-room.flv
+ffplay rtmp://127.0.0.1:1935/live/room
+```
+
+##
+
+
+
+---
+
+### 编码
+
+- 经典 RTMP / FLV：Sorenson H.263、H.264
+- Enhanced RTMP：H.264（`avc1`）、H.265（`hvc1`）
+
+### 运行
+
+```bash
+go run . -rtmp 127.0.0.1:1935 -http 127.0.0.1:8080
+```
+
+浏览器打开 `http://127.0.0.1:8080/`。页面列出当前推流，每路都有可复制的 FLV 地址。写出 TS 分片后才出现 HLS，所以 H.263 只有 FLV。没有推流时显示 No streams，点 Refresh 重新加载。
+
+默认名是 `app-stream`。推 `rtmp://127.0.0.1:1935/live/room` 时，页面上的地址是：
+
+- `http://127.0.0.1:8080/live-room.flv`
+- `http://127.0.0.1:8080/live-room.m3u8`
+
+### 推流
+
+```bash
+ffmpeg -re -i in.mp4 -c:v libx264 -c:a aac -f flv rtmp://127.0.0.1:1935/live/room
+```
+
+OBS Studio：设置 → 直播，服务器 `rtmp://127.0.0.1:1935/live/`，推流码 `room`。
+
+### 播放
+
+```bash
+ffplay http://127.0.0.1:8080/live-room.m3u8
+ffplay http://127.0.0.1:8080/live-room.flv
+ffplay rtmp://127.0.0.1:1935/live/room
+```
