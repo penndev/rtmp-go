@@ -1,0 +1,4 @@
+.git
+runtime
+*.exe
+.DS_Store
