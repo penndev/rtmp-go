@@ -11,7 +11,6 @@ The RTMP specification is now maintained by [Veovera](https://veovera.org/) rath
 
 ```bash
 go run . -rtmp 127.0.0.1:1935 -http 127.0.0.1:8080
-docker run -d --name rtmp -p 1935:1935 -p 8080:8080 penndev/rtmp:latest
 ```
 
 Open `http://127.0.0.1:8080/` in a browser. The page lists live streams. Each one has a copyable FLV address. HLS appears after a TS segment exists, so H.263 stays FLV only. It shows “No streams” when nothing is publishing. Refresh reloads the page.
@@ -20,6 +19,19 @@ The default name is `app-stream`. Publishing to `rtmp://127.0.0.1:1935/live/room
 
 - `http://127.0.0.1:8080/live-room.flv`
 - `http://127.0.0.1:8080/live-room.m3u8`
+
+### Docker
+
+```bash
+docker run -d --name rtmp -p 1935:1935 -p 8080:8080 penndev/rtmp:latest
+```
+
+`latest` is the newest `v*` release. That release is also tagged with its version, such as `penndev/rtmp:v0.0.2`. FLV and TS files are written to `/app/runtime`.
+
+```bash
+docker build -t rtmp .
+docker run -d --name rtmp -p 1935:1935 -p 8080:8080 rtmp
+```
 
 ### Publish
 
@@ -52,7 +64,6 @@ ffplay rtmp://127.0.0.1:1935/live/room
 
 ```bash
 go run . -rtmp 127.0.0.1:1935 -http 127.0.0.1:8080
-docker run -d --name rtmp -p 1935:1935 -p 8080:8080 penndev/rtmp:latest
 ```
 
 浏览器打开 `http://127.0.0.1:8080/`。页面列出当前推流，每路都有可复制的 FLV 地址。写出 TS 分片后才出现 HLS，所以 H.263 只有 FLV。没有推流时显示 No streams，点 Refresh 重新加载。
@@ -61,6 +72,19 @@ docker run -d --name rtmp -p 1935:1935 -p 8080:8080 penndev/rtmp:latest
 
 - `http://127.0.0.1:8080/live-room.flv`
 - `http://127.0.0.1:8080/live-room.m3u8`
+
+### Docker
+
+```bash
+docker run -d --name rtmp -p 1935:1935 -p 8080:8080 penndev/rtmp:latest
+```
+
+`latest` 是最新的 `v*` 版本。同一次发布还会打上版本标签，例如 `penndev/rtmp:v0.0.2`。FLV 和 TS 写在 `/app/runtime`。
+
+```bash
+docker build -t rtmp .
+docker run -d --name rtmp -p 1935:1935 -p 8080:8080 rtmp
+```
 
 ### 推流
 
