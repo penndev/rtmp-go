@@ -1,8 +1,6 @@
 package rtmp
 
 import (
-	"log"
-
 	"github.com/penndev/rtmp/rtmp/stream"
 )
 
@@ -14,10 +12,10 @@ func (srv *Serve) handlePlay(conn *Conn, sub stream.Subscriber) error {
 		return err
 	}
 
-	name := srv.Handler.OnName(conn.App, conn.Stream)
-	log.Printf(
-		"%s playing name=%s conn.App=%s conn.Stream=%s",
-		conn.nc.RemoteAddr(), name, conn.App, conn.Stream)
+	// name := srv.Handler.OnName(conn.App, conn.Stream)
+	// log.Printf(
+	// 	"%s playing name=%s conn.App=%s conn.Stream=%s",
+	// 	conn.nc.RemoteAddr(), name, conn.App, conn.Stream)
 
 	sid := uint32(conn.StreamID)
 
@@ -53,8 +51,8 @@ func (srv *Serve) handlePlay(conn *Conn, sub stream.Subscriber) error {
 			if err := conn.Write(csid, sid, msg); err != nil {
 				return err
 			}
-		case err := <-errCh:
-			return err
+		case <-errCh:
+			return nil
 		}
 	}
 }

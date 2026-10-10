@@ -12,10 +12,10 @@ func (srv *Serve) handlePublish(conn *Conn, topic stream.Publisher) error {
 	if err := conn.StreamBegin(uint32(conn.StreamID)); err != nil {
 		return err
 	}
-	name := srv.Handler.OnName(conn.App, conn.Stream)
-	log.Printf(
-		"%s publishing name=%s conn.App=%s conn.Stream=%s",
-		conn.nc.RemoteAddr(), name, conn.App, conn.Stream)
+	// name := srv.Handler.OnName(conn.App, conn.Stream)
+	// log.Printf(
+	// 	"%s publishing name=%s conn.App=%s conn.Stream=%s",
+	// 	conn.nc.RemoteAddr(), name, conn.App, conn.Stream)
 
 	for {
 		msg, err := conn.Read()

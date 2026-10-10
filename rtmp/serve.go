@@ -18,7 +18,7 @@ type Serve struct {
 }
 
 func (srv *Serve) handle(nc net.Conn) {
-	log.Printf("rtmp handle %s", nc.RemoteAddr())
+	// log.Printf("rtmp handle %s", nc.RemoteAddr())
 	defer func() {
 		nc.Close()
 		if err := recover(); err != nil {
@@ -132,7 +132,7 @@ func (srv *Serve) handle(nc net.Conn) {
 			if err := srv.handlePublish(conn, topic); err != nil {
 				log.Printf("%s handlePublish fail err[%s]", nc.RemoteAddr(), err.Error())
 			} else {
-				log.Printf("%s handlePublish Finsh", nc.RemoteAddr())
+				// log.Printf("%s handlePublish Finsh", nc.RemoteAddr())
 			}
 			return
 		case "play":
@@ -168,6 +168,8 @@ func (srv *Serve) handle(nc net.Conn) {
 				log.Printf("%s handlePlay Finsh", nc.RemoteAddr())
 			}
 			return
+		case "getStreamLength":
+			// live ignore getStreamLength
 		default:
 			log.Printf("%s ignore netstream command: %s", nc.RemoteAddr(), name)
 		}
@@ -194,6 +196,6 @@ func (srv *Serve) Listen(address string) error {
 }
 
 // create new rtmp serve
-func New(h handler.Handler, streams stream.Stream) *Serve {
-	return &Serve{Handler: h, Stream: streams}
+func New(h handler.Handler, stream stream.Stream) *Serve {
+	return &Serve{Handler: h, Stream: stream}
 }

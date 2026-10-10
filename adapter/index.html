@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Live</title>
+<style>
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: #f3f3f3;
+  color: #222;
+  font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+main {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 40px 20px 72px;
+}
+header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+h1 {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 600;
+}
+header p {
+  margin: 6px 0 0;
+  color: #777;
+  font-size: 14px;
+}
+button {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background: #fff;
+  color: #222;
+  font: 14px/1 sans-serif;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+button:hover { background: #f7f7f7; }
+.item {
+  background: #fff;
+  border: 1px solid #e6e6e6;
+  border-radius: 12px;
+  padding: 16px 16px 8px;
+  margin: 0 0 14px;
+}
+.name {
+  font-size: 18px;
+  margin-bottom: 8px;
+}
+.row { margin: 0 0 12px; }
+.row span {
+  display: block;
+  margin-bottom: 4px;
+  color: #777;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+}
+input {
+  width: 100%;
+  border: 1px solid #e6e6e6;
+  border-radius: 8px;
+  background: #f7f7f7;
+  color: #222;
+  font: 14px/1.4 Consolas, "Cascadia Mono", ui-monospace, monospace;
+  padding: 8px 10px;
+}
+input:focus { outline: 2px solid #ccc; }
+.empty {
+  background: #fff;
+  border: 1px dashed #ddd;
+  border-radius: 12px;
+  padding: 28px 16px;
+  text-align: center;
+  color: #777;
+}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1>Live</h1>
+      <p>Click an address to select and copy.</p>
+    </div>
+    <button type="button" onclick="location.reload()">Refresh</button>
+  </header>
+  {{if not .}}<p class="empty">No streams</p>{{else}}
+  {{range .}}<section class="item" data-name="{{.Name}}"{{if .HLS}} data-hls="1"{{end}}><div class="name">{{.Name}}</div></section>{{end}}{{end}}
+</main>
+<script>
+for (const el of document.querySelectorAll(".item")) {
+  const name = el.dataset.name;
+  const kinds = [{ label: "FLV", ext: "flv" }];
+  if (el.dataset.hls) kinds.push({ label: "HLS", ext: "m3u8" });
+  for (const kind of kinds) {
+    const row = document.createElement("div");
+    row.className = "row";
+    const label = document.createElement("span");
+    label.textContent = kind.label;
+    const input = document.createElement("input");
+    input.readOnly = true;
+    input.value = location.origin + "/" + encodeURIComponent(name) + "." + kind.ext;
+    input.onclick = () => input.select();
+    row.append(label, input);
+    el.append(row);
+  }
+}
+</script>
+</body>
+</html>

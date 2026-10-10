@@ -3,6 +3,7 @@ package pubsub
 import (
 	"errors"
 	"log"
+	"sort"
 	"sync"
 
 	"github.com/penndev/rtmp/codec/flv"
@@ -19,13 +20,27 @@ type Hub struct {
 	mu     sync.RWMutex
 	meta   map[string]*flvMeta
 	broker *Broker
+
+	//
+	AfterPublish func(name string, sub stream.Subscriber)
 }
 
-func NewRtmp() *Hub {
+func NewHubStream() *Hub {
 	return &Hub{
 		meta:   make(map[string]*flvMeta),
 		broker: NewBroker(),
 	}
+}
+
+func (h *Hub) Names() []string {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	names := make([]string, 0, len(h.meta))
+	for name := range h.meta {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 func (h *Hub) Publish(name string) (stream.Publisher, error) {
@@ -110,6 +125,16 @@ func (h *Hub) Publish(name string) (stream.Publisher, error) {
 			}
 		}
 	}
+
+	// 添加回调。
+	if h.AfterPublish != nil {
+		sub, err := h.Play(name)
+		if err != nil {
+			return top, err
+		}
+		h.AfterPublish(name, sub)
+	}
+
 	return top, nil
 }
 
